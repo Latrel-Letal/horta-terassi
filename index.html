@@ -275,6 +275,7 @@
       <div id="npItens"></div>
       <button class="add-item-btn" id="btnAddItem" type="button">+ adicionar item avulso</button>
       <button class="btn btn-primary" id="btnSalvarPedido" type="button">Salvar pedido</button>
+      <button class="btn btn-ghost" id="btnCancelarEdicaoPedido" type="button" style="display:none;margin-left:8px;">Cancelar edição</button>
     </div>
   </section>
 
@@ -451,6 +452,7 @@ let precos = {}; // { [clienteId]: { [itemKey]: valorNumero } } — override de 
 let currentResumoPedidoId = null;
 let currentPrecoClienteId = null;
 let editingProdutoId = null;
+let editingPedidoId = null;
 
 function uid(){ return Date.now().toString(36) + Math.random().toString(36).slice(2,7); }
 
@@ -671,6 +673,45 @@ function addItemRow(){
 document.getElementById('btnAddItem').addEventListener('click', addItemRow);
 document.getElementById('npCliente').addEventListener('change', updateNpGridPrices);
 
+function iniciarEdicaoPedido(id){
+  const p = pedidos.find(x=>x.id===id);
+  if(!p) return;
+  editingPedidoId = id;
+  document.getElementById('npCliente').value = p.clienteId;
+  document.getElementById('npData').value = p.data;
+  clearNpGrid();
+  document.getElementById('npItens').innerHTML = '';
+  p.itens.forEach(it=>{
+    const idx = produtos.findIndex(pr=> (pr.codigo || ('DESC:'+pr.descricao)) === it.codigo);
+    if(idx>=0){
+      const input = document.querySelector(`.np-grid-qtd[data-index="${idx}"]`);
+      if(input) input.value = it.quantidade;
+    } else {
+      addItemRow();
+      const wrap = document.getElementById('npItens');
+      const row = wrap.lastElementChild;
+      row.querySelector('.np-produto').value = it.codigo;
+      row.querySelector('.np-qtd').value = it.quantidade;
+    }
+  });
+  updateNpGridPrices();
+  document.getElementById('btnSalvarPedido').textContent = 'Atualizar pedido';
+  document.getElementById('btnCancelarEdicaoPedido').style.display = 'inline-block';
+  document.querySelector('nav.tabs button[data-tab="novo"]').click();
+  showToast('Editando pedido — ajuste as quantidades e salve.');
+}
+function cancelarEdicaoPedido(){
+  editingPedidoId = null;
+  clearNpGrid();
+  document.getElementById('npItens').innerHTML = '';
+  document.getElementById('btnSalvarPedido').textContent = 'Salvar pedido';
+  document.getElementById('btnCancelarEdicaoPedido').style.display = 'none';
+}
+document.getElementById('btnCancelarEdicaoPedido').addEventListener('click', ()=>{
+  cancelarEdicaoPedido();
+  document.querySelector('nav.tabs button[data-tab="pedidos"]').click();
+});
+
 document.getElementById('btnSalvarPedido').addEventListener('click', async ()=>{
   const clienteId = document.getElementById('npCliente').value;
   const data = document.getElementById('npData').value;
@@ -689,6 +730,16 @@ document.getElementById('btnSalvarPedido').addEventListener('click', async ()=>{
     if(codigo && qtd>0) itens.push({codigo, quantidade: qtd});
   });
   if(itens.length===0){ showToast('Preencha a quantidade de ao menos uma espécie.'); return; }
+  if(editingPedidoId){
+    const p = pedidos.find(x=>x.id===editingPedidoId);
+    if(p){ p.clienteId = clienteId; p.data = data; p.itens = itens; }
+    await save('pedidos', pedidos);
+    cancelarEdicaoPedido();
+    renderPedidos();
+    document.querySelector('nav.tabs button[data-tab="pedidos"]').click();
+    showToast('Pedido atualizado.');
+    return;
+  }
   pedidos.push({ id: uid(), clienteId, data, itens, status:'pendente', notaNumero:'', notaChave:'', dataEntrega:'' });
   await save('pedidos', pedidos);
   clearNpGrid();
@@ -739,6 +790,8 @@ function attachTicketListeners(){
   document.querySelectorAll('[data-action="entregar"]').forEach(b=>b.addEventListener('click', onEntregar));
   document.querySelectorAll('[data-action="resumo"]').forEach(b=>b.addEventListener('click', onVerResumo));
   document.querySelectorAll('[data-action="excluir"]').forEach(b=>b.addEventListener('click', onExcluir));
+  document.querySelectorAll('[data-action="reabrir"]').forEach(b=>b.addEventListener('click', onReabrir));
+  document.querySelectorAll('[data-action="editar-itens"]').forEach(b=>b.addEventListener('click', ()=>iniciarEdicaoPedido(b.dataset.id)));
   document.querySelectorAll('.devolucao-input').forEach(inp=>inp.addEventListener('change', onDevolucaoChange));
 }
 
@@ -782,6 +835,8 @@ function ticketHTML(p){
     ${p.notaNumero ? `<div class="muted" style="margin-top:6px;">Nota nº ${p.notaNumero}${p.notaChave ? ' · chave ...'+p.notaChave.slice(-6) : ''}</div>` : ''}
     <div class="ticket-actions">
       ${p.status==='pendente' ? `<button class="btn btn-primary btn-small" data-action="entregar" data-id="${p.id}">Marcar como entregue</button>` : `<button class="btn btn-ghost btn-small" data-action="resumo" data-id="${p.id}">Ver ficha da nota</button>`}
+      ${p.status==='pendente' ? `<button class="btn btn-ghost btn-small" data-action="editar-itens" data-id="${p.id}">Editar itens</button>` : ''}
+      ${p.status==='entregue' ? `<button class="btn btn-ghost btn-small" data-action="reabrir" data-id="${p.id}">Reabrir pedido</button>` : ''}
       <button class="btn btn-danger btn-small" data-action="excluir" data-id="${p.id}">Excluir</button>
     </div>
   </div>`;
@@ -803,6 +858,23 @@ async function onExcluir(e){
   pedidos = pedidos.filter(x=>x.id!==id);
   await save('pedidos', pedidos);
   renderPedidos();
+}
+async function onReabrir(e){
+  const id = e.target.dataset.id;
+  const p = pedidos.find(x=>x.id===id);
+  if(!p) return;
+  const jaTinhaNota = !!p.notaNumero;
+  if(!confirm(jaTinhaNota
+    ? 'Este pedido já tem uma nota registrada. Reabrir só corrige o pedido aqui no painel — se a nota já foi emitida de verdade, cancele ela antes no Portal Receita/PR. Continuar?'
+    : 'Reabrir este pedido para editar os itens?')) return;
+  p.status = 'pendente';
+  p.dataEntrega = '';
+  p.devolucaoValor = 0;
+  p.notaNumero = '';
+  p.notaChave = '';
+  await save('pedidos', pedidos);
+  renderPedidos();
+  showToast('Pedido reaberto. Você já pode editar os itens.');
 }
 
 function openResumo(id){

@@ -243,6 +243,7 @@
     <button data-tab="novo">Novo pedido</button>
     <button data-tab="clientes">Clientes</button>
     <button data-tab="produtos">Produtos</button>
+    <button data-tab="perdas">Perdas</button>
     <button data-tab="relatorio">Relatório</button>
   </nav>
 
@@ -331,6 +332,48 @@
     </div>
   </section>
 
+  <!-- PERDAS -->
+  <section class="panel" id="panel-perdas">
+    <h2 class="sec">Perdas / devoluções</h2>
+    <p class="muted" style="margin-top:-8px;">Quantidade e valor perdido, calculados a partir da perda por produto lançada em cada pedido entregue.</p>
+    <div class="card">
+      <div class="row2">
+        <div class="field"><label>De</label><input type="date" id="pdDe"></div>
+        <div class="field"><label>Até</label><input type="date" id="pdAte"></div>
+      </div>
+      <div class="row2">
+        <div class="field"><label>Produto</label><select id="pdProduto"><option value="">Todos os produtos</option></select></div>
+        <div class="field"><label>Mercado</label><select id="pdMercado"><option value="">Todos os mercados</option></select></div>
+      </div>
+      <div class="row2">
+        <div class="field">
+          <label>Gráfico agrupado por</label>
+          <select id="pdAgrupar">
+            <option value="produto">Produto</option>
+            <option value="mercado">Mercado</option>
+          </select>
+        </div>
+        <div class="field">
+          <label>Métrica do gráfico</label>
+          <select id="pdMetrica">
+            <option value="quantidade">Quantidade perdida</option>
+            <option value="valor">Valor perdido (R$)</option>
+          </select>
+        </div>
+      </div>
+      <div style="display:flex;gap:8px;">
+        <button class="btn btn-primary btn-small" id="btnFiltrarPerdas" type="button">Filtrar</button>
+        <button class="btn btn-ghost btn-small" id="btnLimparPerdas" type="button">Limpar filtro</button>
+      </div>
+    </div>
+    <div class="card">
+      <canvas id="graficoPerdas" height="120"></canvas>
+    </div>
+    <div class="card">
+      <table class="list" id="tabelaPerdas"></table>
+    </div>
+  </section>
+
   <!-- RELATÓRIO -->
   <section class="panel" id="panel-relatorio">
     <h2 class="sec">Relatório por mercado</h2>
@@ -396,6 +439,7 @@
 
 <div class="toast" id="toast"></div>
 
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-auth-compat.js"></script>
@@ -766,6 +810,15 @@ function getPreco(clienteId, itemKey){
 function pedidoTotal(pedido){
   return pedido.itens.reduce((s,it)=> s + getPreco(pedido.clienteId, it.codigo) * it.quantidade, 0);
 }
+// Perda/devolução agora é lançada por produto (quantidade), e convertida em R$
+// usando o preço aplicado a esse cliente/produto — não mais um valor único em R$.
+function devolucaoValorTotal(pedido){
+  const dev = pedido.devolucoes || {};
+  return pedido.itens.reduce((s,it)=>{
+    const q = dev[it.codigo] || 0;
+    return s + q * getPreco(pedido.clienteId, it.codigo);
+  }, 0);
+}
 function fmtData(d){
   if(!d) return '';
   const [y,m,day] = d.split('-');
@@ -784,6 +837,7 @@ function renderPedidos(){
 
   attachTicketListeners();
   renderRelatorio();
+  renderPerdas();
 }
 
 function attachTicketListeners(){
@@ -798,25 +852,37 @@ function attachTicketListeners(){
 async function onDevolucaoChange(e){
   const p = pedidos.find(x=>x.id===e.target.dataset.id);
   if(!p) return;
-  p.devolucaoValor = parseFloat(e.target.value) || 0;
+  const codigo = e.target.dataset.codigo;
+  const qtd = parseFloat(e.target.value) || 0;
+  if(!p.devolucoes) p.devolucoes = {};
+  if(qtd > 0) p.devolucoes[codigo] = qtd;
+  else delete p.devolucoes[codigo];
   await save('pedidos', pedidos);
   renderPedidos();
-  showToast('Devolução registrada.');
+  showToast('Perda registrada.');
 }
 
 function ticketHTML(p){
   const total = pedidoTotal(p);
-  const devolucao = p.devolucaoValor || 0;
+  const devolucao = devolucaoValorTotal(p);
   const liquido = total - devolucao;
   const itensHtml = p.itens.map(it=>{
     const info = produtoInfo(it.codigo);
     return `<li><span>${info.descricao}</span><span class="qtd">${it.quantidade} ${info.unidade}</span></li>`;
   }).join('');
+  const devObj = p.devolucoes || {};
+  const itensPerdaHtml = p.itens.map(it=>{
+    const info = produtoInfo(it.codigo);
+    const q = devObj[it.codigo] || '';
+    return `<div class="np-row" style="padding:6px 0;">
+      <span class="esp">${info.descricao} <span class="muted">(entregue: ${it.quantidade})</span></span>
+      <input type="number" step="1" min="0" max="${it.quantidade}" class="devolucao-input" data-id="${p.id}" data-codigo="${it.codigo}" value="${q}" placeholder="0">
+    </div>`;
+  }).join('');
   const devolucaoHtml = p.status==='entregue' ? `
-    <div class="np-row" style="padding:8px 0;">
-      <span class="esp">Devolução / perda (R$)</span>
-      <input type="number" step="0.01" class="devolucao-input" data-id="${p.id}" value="${p.devolucaoValor || ''}" placeholder="0,00">
-    </div>
+    <label style="margin-top:10px;">Perda / devolução por produto (quantidade)</label>
+    ${itensPerdaHtml}
+    <div class="muted" style="text-align:right;margin-top:2px;">Valor da perda: R$ ${devolucao.toFixed(2)}</div>
     <div class="ticket-total" style="color:var(--forest-deep);"><span>Líquido a receber</span><span>R$ ${liquido.toFixed(2)}</span></div>
   ` : '';
   return `
@@ -869,7 +935,7 @@ async function onReabrir(e){
     : 'Reabrir este pedido para editar os itens?')) return;
   p.status = 'pendente';
   p.dataEntrega = '';
-  p.devolucaoValor = 0;
+  p.devolucoes = {};
   p.notaNumero = '';
   p.notaChave = '';
   await save('pedidos', pedidos);
@@ -984,7 +1050,7 @@ function renderRelatorio(){
   const porCliente = {};
   entregues.forEach(p=>{
     const total = pedidoTotal(p);
-    const dev = p.devolucaoValor || 0;
+    const dev = devolucaoValorTotal(p);
     if(!porCliente[p.clienteId]) porCliente[p.clienteId] = {pedidos:0, bruto:0, devolucao:0};
     porCliente[p.clienteId].pedidos++;
     porCliente[p.clienteId].bruto += total;
@@ -1025,6 +1091,122 @@ function renderRelatorio(){
     }
   }
 }
+// PERDAS — filtro por produto e mercado, com gráfico e tabela
+let chartPerdas = null;
+
+function populatePerdasFiltros(){
+  const selProd = document.getElementById('pdProduto');
+  const curProd = selProd.value;
+  selProd.innerHTML = '<option value="">Todos os produtos</option>' +
+    produtos.map(p=>`<option value="${p.codigo}">${p.descricao}</option>`).join('');
+  if(curProd) selProd.value = curProd;
+
+  const selMerc = document.getElementById('pdMercado');
+  const curMerc = selMerc.value;
+  selMerc.innerHTML = '<option value="">Todos os mercados</option>' +
+    clientes.map(c=>`<option value="${c.id}">${c.apelido || c.nome}</option>`).join('');
+  if(curMerc) selMerc.value = curMerc;
+}
+
+function coletarPerdas(){
+  const de = document.getElementById('pdDe').value;
+  const ate = document.getElementById('pdAte').value;
+  const filtroProduto = document.getElementById('pdProduto').value;
+  const filtroMercado = document.getElementById('pdMercado').value;
+
+  const registros = [];
+  pedidos
+    .filter(p=> p.status==='entregue' && (!de || p.dataEntrega>=de) && (!ate || p.dataEntrega<=ate))
+    .forEach(p=>{
+      const dev = p.devolucoes || {};
+      p.itens.forEach(it=>{
+        const qtd = dev[it.codigo] || 0;
+        if(qtd<=0) return;
+        if(filtroProduto && it.codigo!==filtroProduto) return;
+        if(filtroMercado && p.clienteId!==filtroMercado) return;
+        const info = produtoInfo(it.codigo);
+        registros.push({
+          data: p.dataEntrega,
+          clienteId: p.clienteId,
+          clienteNome: clienteNome(p.clienteId),
+          produtoDescricao: info.descricao,
+          quantidade: qtd,
+          valor: qtd * getPreco(p.clienteId, it.codigo)
+        });
+      });
+    });
+  return registros;
+}
+
+function renderPerdas(){
+  if(!document.getElementById('panel-perdas')) return;
+  populatePerdasFiltros();
+  const registros = coletarPerdas();
+  const agrupar = document.getElementById('pdAgrupar').value;
+  const metrica = document.getElementById('pdMetrica').value;
+
+  const grupos = {};
+  registros.forEach(r=>{
+    const chave = agrupar==='produto' ? r.produtoDescricao : r.clienteNome;
+    if(!grupos[chave]) grupos[chave] = {quantidade:0, valor:0};
+    grupos[chave].quantidade += r.quantidade;
+    grupos[chave].valor += r.valor;
+  });
+  const labels = Object.keys(grupos).sort((a,b)=> grupos[b][metrica]-grupos[a][metrica]);
+  const dados = labels.map(l=> grupos[l][metrica]);
+
+  const canvas = document.getElementById('graficoPerdas');
+  if(canvas && window.Chart){
+    const ctx = canvas.getContext('2d');
+    if(chartPerdas) chartPerdas.destroy();
+    chartPerdas = new Chart(ctx, {
+      type: 'bar',
+      data: {
+        labels,
+        datasets: [{
+          label: metrica==='quantidade' ? 'Quantidade perdida' : 'Valor perdido (R$)',
+          data: dados,
+          backgroundColor: '#5E8F52',
+          borderRadius: 5,
+        }]
+      },
+      options: {
+        responsive: true,
+        plugins:{ legend:{ display:false } },
+        scales:{ y:{ beginAtZero:true } }
+      }
+    });
+  }
+
+  const tabela = document.getElementById('tabelaPerdas');
+  if(!tabela) return;
+  if(registros.length===0){
+    tabela.innerHTML = '<tr><td class="empty">Nenhuma perda registrada no período/filtro selecionado.</td></tr>';
+    return;
+  }
+  const ordenados = [...registros].sort((a,b)=> b.data.localeCompare(a.data));
+  let totQtd=0, totValor=0;
+  const linhas = ordenados.map(r=>{
+    totQtd += r.quantidade; totValor += r.valor;
+    return `<tr><td>${fmtData(r.data)}</td><td>${r.clienteNome}</td><td>${r.produtoDescricao}</td><td>${r.quantidade}</td><td>R$ ${r.valor.toFixed(2)}</td></tr>`;
+  }).join('');
+  tabela.innerHTML = `<tr><th>Data</th><th>Mercado</th><th>Produto</th><th>Qtd. perdida</th><th>Valor perdido</th></tr>` +
+    linhas +
+    `<tr style="border-top:2px solid var(--forest);"><td colspan="3"><b>Total</b></td><td><b>${totQtd}</b></td><td><b>R$ ${totValor.toFixed(2)}</b></td></tr>`;
+}
+document.getElementById('btnFiltrarPerdas').addEventListener('click', renderPerdas);
+document.getElementById('btnLimparPerdas').addEventListener('click', ()=>{
+  document.getElementById('pdDe').value = '';
+  document.getElementById('pdAte').value = '';
+  document.getElementById('pdProduto').value = '';
+  document.getElementById('pdMercado').value = '';
+  document.getElementById('pdAgrupar').value = 'produto';
+  document.getElementById('pdMetrica').value = 'quantidade';
+  renderPerdas();
+});
+document.getElementById('pdAgrupar').addEventListener('change', renderPerdas);
+document.getElementById('pdMetrica').addEventListener('change', renderPerdas);
+
 document.getElementById('btnFiltrarRel').addEventListener('click', renderRelatorio);
 document.getElementById('btnLimparRel').addEventListener('click', ()=>{
   document.getElementById('relDe').value=''; document.getElementById('relAte').value='';

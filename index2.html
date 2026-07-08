@@ -1,0 +1,916 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Horta Terassi — Pedidos</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,600;9..144,700&family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --paper:#EEF1E9;
+    --paper-card:#FFFFFF;
+    --ink:#1B2420;
+    --ink-soft:#4B564C;
+    --forest:#1F3D2B;
+    --forest-deep:#132A1D;
+    --leaf:#5E8F52;
+    --gold:#C08A2E;
+    --red:#A6432F;
+    --line:#D8D9C9;
+    --shadow: 0 1px 2px rgba(27,36,32,0.06), 0 4px 14px rgba(27,36,32,0.06);
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0;
+    background:var(--paper);
+    color:var(--ink);
+    font-family:'IBM Plex Sans', sans-serif;
+    -webkit-font-smoothing:antialiased;
+  }
+  .wrap{max-width:900px;margin:0 auto;padding:20px 16px 80px;}
+
+  header.top{
+    display:flex;align-items:flex-end;justify-content:space-between;
+    padding:6px 2px 18px;border-bottom:2px solid var(--forest);
+    margin-bottom:20px;flex-wrap:wrap;gap:10px;
+  }
+  .brand h1{
+    font-family:'Fraunces', serif;font-weight:700;font-size:28px;
+    margin:0;color:var(--forest-deep);letter-spacing:-0.01em;
+  }
+  .brand p{margin:2px 0 0;font-size:12.5px;color:var(--ink-soft);letter-spacing:.03em;text-transform:uppercase;}
+  .emitente{font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--ink-soft);text-align:right;line-height:1.5;}
+
+  nav.tabs{display:flex;gap:6px;margin-bottom:22px;flex-wrap:wrap;}
+  nav.tabs button{
+    font-family:'IBM Plex Sans',sans-serif;font-weight:600;font-size:13.5px;
+    padding:9px 16px;border-radius:999px;border:1.5px solid var(--forest);
+    background:transparent;color:var(--forest-deep);cursor:pointer;
+    transition:.15s;
+  }
+  nav.tabs button.active{background:var(--forest);color:#fff;}
+  nav.tabs button:hover:not(.active){background:rgba(31,61,43,0.08);}
+
+  .panel{display:none;}
+  .panel.active{display:block;animation:fade .18s ease;}
+  @keyframes fade{from{opacity:0;transform:translateY(3px);}to{opacity:1;transform:none;}}
+
+  h2.sec{font-family:'Fraunces',serif;font-size:20px;font-weight:600;color:var(--forest-deep);margin:0 0 14px;}
+
+  .card{
+    background:var(--paper-card);border:1px solid var(--line);border-radius:10px;
+    box-shadow:var(--shadow);padding:18px;margin-bottom:16px;
+  }
+
+  label{display:block;font-size:12px;font-weight:600;color:var(--ink-soft);margin-bottom:5px;text-transform:uppercase;letter-spacing:.03em;}
+  select, input[type=text], input[type=number], input[type=date]{
+    width:100%;padding:10px 11px;border-radius:7px;border:1.5px solid var(--line);
+    background:#fff;font-family:'IBM Plex Sans',sans-serif;font-size:14.5px;color:var(--ink);
+  }
+  select:focus, input:focus{outline:2px solid var(--leaf);outline-offset:1px;border-color:var(--leaf);}
+  .field{margin-bottom:12px;}
+  .row2{display:grid;grid-template-columns:1fr 1fr;gap:12px;}
+  .row-item{
+    display:grid;grid-template-columns:1fr 90px 34px;gap:8px;align-items:end;margin-bottom:10px;
+  }
+  @media (max-width:520px){
+    .row2{grid-template-columns:1fr;}
+    .row-item{grid-template-columns:1fr 78px 30px;}
+  }
+
+  button.btn{
+    font-family:'IBM Plex Sans',sans-serif;font-weight:600;font-size:14px;
+    padding:10px 18px;border-radius:8px;border:none;cursor:pointer;transition:.15s;
+  }
+  .btn-primary{background:var(--forest);color:#fff;}
+  .btn-primary:hover{background:var(--forest-deep);}
+  .btn-ghost{background:transparent;border:1.5px solid var(--line);color:var(--ink);}
+  .btn-ghost:hover{border-color:var(--forest);}
+  .btn-danger{background:transparent;color:var(--red);border:1.5px solid rgba(166,67,47,.35);}
+  .btn-small{padding:6px 12px;font-size:12.5px;border-radius:6px;}
+  .btn-remove{
+    width:34px;height:38px;border-radius:7px;border:1.5px solid var(--line);background:#fff;
+    color:var(--red);cursor:pointer;font-size:16px;line-height:1;
+  }
+
+  .np-grid{
+    display:grid;grid-template-columns:1fr 1fr;gap:0 18px;
+    border:1px solid var(--line);border-radius:8px;padding:4px 12px;margin-bottom:8px;background:#fff;
+  }
+  @media (max-width:560px){ .np-grid{grid-template-columns:1fr;} }
+  .np-row{
+    display:flex;align-items:center;justify-content:space-between;gap:10px;
+    padding:8px 0;border-bottom:1px dashed var(--line);
+  }
+  .np-grid > .np-row:nth-last-child(1),.np-grid > .np-row:nth-last-child(2){border-bottom:none;}
+  .np-row .esp{font-size:14px;color:var(--ink);}
+  .np-row .esp .warn{color:var(--gold);font-size:11px;margin-left:5px;}
+  .np-row input{width:64px;padding:7px 8px;text-align:center;border-radius:6px;border:1.5px solid var(--line);font-family:'IBM Plex Mono',monospace;font-size:14px;}
+  .np-row input:focus{outline:2px solid var(--leaf);border-color:var(--leaf);}
+
+  .add-item-btn{background:none;border:1.5px dashed var(--line);color:var(--forest);
+    width:100%;padding:9px;border-radius:7px;font-weight:600;font-size:13px;cursor:pointer;margin-bottom:14px;}
+  .add-item-btn:hover{border-color:var(--forest);background:rgba(31,61,43,0.05);}
+
+  /* Ticket / pedido card, estilo talão */
+  .ticket{
+    position:relative;background:var(--paper-card);border:1px solid var(--line);
+    border-radius:10px;padding:16px 16px 14px;margin-bottom:14px;box-shadow:var(--shadow);
+    overflow:hidden;
+  }
+  .ticket::before{
+    content:"";position:absolute;left:0;top:0;bottom:0;width:5px;
+  }
+  .ticket.pendente::before{background:var(--gold);}
+  .ticket.entregue::before{background:var(--leaf);}
+  .ticket-head{display:flex;justify-content:space-between;align-items:flex-start;gap:10px;margin-bottom:8px;}
+  .ticket-head .cliente{font-family:'Fraunces',serif;font-weight:600;font-size:17px;color:var(--forest-deep);}
+  .ticket-head .meta{font-family:'IBM Plex Mono',monospace;font-size:11.5px;color:var(--ink-soft);margin-top:2px;}
+  .tag{font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;
+    padding:4px 9px;border-radius:999px;white-space:nowrap;}
+  .tag.pendente{background:#FBF0DA;color:#8A611C;}
+  .tag.entregue{background:#E7F0E3;color:#3B6A32;}
+  ul.itens{list-style:none;margin:10px 0;padding:0;border-top:1px dashed var(--line);}
+  ul.itens li{
+    display:flex;justify-content:space-between;padding:6px 0;font-size:14px;
+    border-bottom:1px dashed var(--line);
+  }
+  ul.itens li .qtd{font-family:'IBM Plex Mono',monospace;color:var(--ink-soft);}
+  .ticket-total{display:flex;justify-content:space-between;font-weight:700;margin-top:6px;font-size:14.5px;}
+  .ticket-actions{display:flex;gap:8px;margin-top:12px;flex-wrap:wrap;}
+  .stamp{
+    position:absolute;right:14px;top:14px;border:2.5px solid var(--leaf);color:var(--leaf);
+    font-family:'Fraunces',serif;font-weight:700;font-size:12px;letter-spacing:.08em;
+    padding:3px 10px;border-radius:6px;transform:rotate(8deg);text-transform:uppercase;opacity:.85;
+  }
+
+  table.list{width:100%;border-collapse:collapse;font-size:14px;}
+  table.list th{text-align:left;font-size:11px;text-transform:uppercase;letter-spacing:.03em;
+    color:var(--ink-soft);border-bottom:1.5px solid var(--forest);padding:8px 6px;}
+  table.list td{padding:9px 6px;border-bottom:1px solid var(--line);}
+  table.list tr:last-child td{border-bottom:none;}
+  .muted{color:var(--ink-soft);font-size:12.5px;}
+  .empty{padding:28px 16px;text-align:center;color:var(--ink-soft);font-size:14px;}
+
+  .modal-bg{
+    display:none;position:fixed;inset:0;background:rgba(19,42,29,0.45);z-index:50;
+    align-items:flex-start;justify-content:center;padding:26px 14px;overflow:auto;
+  }
+  .modal-bg.open{display:flex;}
+  .modal{
+    background:#fff;border-radius:12px;max-width:620px;width:100%;padding:24px;
+    box-shadow:0 20px 60px rgba(0,0,0,.25);
+  }
+  .modal h3{font-family:'Fraunces',serif;font-size:20px;margin:0 0 4px;color:var(--forest-deep);}
+  .modal .sub{font-size:12.5px;color:var(--ink-soft);margin-bottom:16px;}
+  .modal-close{float:right;background:none;border:none;font-size:20px;cursor:pointer;color:var(--ink-soft);}
+
+  .resumo-block{border:1px solid var(--line);border-radius:8px;padding:14px;margin-bottom:12px;background:var(--paper);}
+  .resumo-block h4{margin:0 0 8px;font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--forest);}
+  .resumo-line{font-family:'IBM Plex Mono',monospace;font-size:12.5px;line-height:1.7;white-space:pre-wrap;}
+  #resumoTexto{width:100%;min-height:220px;font-family:'IBM Plex Mono',monospace;font-size:12px;
+    border:1.5px solid var(--line);border-radius:8px;padding:12px;background:#fff;}
+
+  .toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);
+    background:var(--forest-deep);color:#fff;padding:10px 18px;border-radius:8px;font-size:13.5px;
+    box-shadow:var(--shadow);z-index:80;opacity:0;pointer-events:none;transition:.2s;}
+  .toast.show{opacity:1;transform:translate(-50%,-4px);}
+
+  .shared-note{font-size:11.5px;color:var(--ink-soft);background:#fff;border:1px solid var(--line);
+    border-radius:8px;padding:9px 12px;margin-bottom:16px;}
+
+  @media print{
+    body *{visibility:hidden;}
+    #printArea, #printArea *{visibility:visible;}
+    #printArea{position:absolute;left:0;top:0;width:100%;padding:20px;}
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header class="top">
+    <div class="brand">
+      <h1>Horta Terassi</h1>
+      <p>Painel de pedidos &amp; notas do produtor</p>
+    </div>
+    <div class="emitente">
+      FABRICIO INACIO TERASSI · CPF 035.356.189-40<br>
+      IE 9593472202 · Bela Vista do Paraíso/PR
+    </div>
+  </header>
+
+  <nav class="tabs">
+    <button data-tab="pedidos" class="active">Pedidos</button>
+    <button data-tab="novo">Novo pedido</button>
+    <button data-tab="clientes">Clientes</button>
+    <button data-tab="produtos">Produtos</button>
+    <button data-tab="relatorio">Relatório</button>
+  </nav>
+
+  <!-- PEDIDOS -->
+  <section class="panel active" id="panel-pedidos">
+    <h2 class="sec">Pendentes de entrega</h2>
+    <div id="listaPendentes"></div>
+    <h2 class="sec" style="margin-top:26px;">Entregues</h2>
+    <div id="listaEntregues"></div>
+  </section>
+
+  <!-- NOVO PEDIDO -->
+  <section class="panel" id="panel-novo">
+    <h2 class="sec">Lançar pedido</h2>
+    <div class="card">
+      <div class="row2">
+        <div class="field">
+          <label>Cliente / mercado</label>
+          <select id="npCliente"></select>
+        </div>
+        <div class="field">
+          <label>Data do pedido</label>
+          <input type="date" id="npData">
+        </div>
+      </div>
+      <label style="margin-top:6px;">Espécies — preencha só as quantidades que forem sair</label>
+      <div id="npGrid" class="np-grid"></div>
+
+      <label style="margin-top:16px;">Item avulso (algo fora da lista acima)</label>
+      <div id="npItens"></div>
+      <button class="add-item-btn" id="btnAddItem" type="button">+ adicionar item avulso</button>
+      <button class="btn btn-primary" id="btnSalvarPedido" type="button">Salvar pedido</button>
+    </div>
+  </section>
+
+  <!-- CLIENTES -->
+  <section class="panel" id="panel-clientes">
+    <h2 class="sec">Clientes cadastrados</h2>
+    <div class="card">
+      <table class="list" id="tabelaClientes"></table>
+    </div>
+    <h2 class="sec">Adicionar cliente</h2>
+    <div class="card">
+      <div class="row2">
+        <div class="field"><label>Apelido (como vocês chamam)</label><input type="text" id="clApelido" placeholder="Ex: Muffato Duque"></div>
+        <div class="field"><label>Razão social</label><input type="text" id="clNome" placeholder="Ex: Irmãos Muffato & Cia Ltda"></div>
+      </div>
+      <div class="field"><label>CNPJ</label><input type="text" id="clCnpj" placeholder="00.000.000/0000-00"></div>
+      <div class="field"><label>Endereço</label><input type="text" id="clEndereco" placeholder="Rua/Avenida, número"></div>
+      <div class="row2">
+        <div class="field"><label>Bairro</label><input type="text" id="clBairro"></div>
+        <div class="field"><label>Município / UF</label><input type="text" id="clMunicipio" placeholder="Londrina/PR"></div>
+      </div>
+      <div class="row2">
+        <div class="field"><label>CEP</label><input type="text" id="clCep"></div>
+        <div class="field"><label>Inscrição estadual</label><input type="text" id="clIe"></div>
+      </div>
+      <button class="btn btn-primary" id="btnSalvarCliente" type="button">Salvar cliente</button>
+    </div>
+  </section>
+
+  <!-- PRODUTOS -->
+  <section class="panel" id="panel-produtos">
+    <h2 class="sec">Produtos cadastrados</h2>
+    <p class="muted" style="margin-top:-6px;">O preço aqui é o padrão, usado quando o cliente não tiver um preço específico definido (veja a aba Clientes → Preços).</p>
+    <div class="card">
+      <table class="list" id="tabelaProdutos"></table>
+    </div>
+    <h2 class="sec">Adicionar produto</h2>
+    <div class="card">
+      <div class="row2">
+        <div class="field"><label>Código</label><input type="text" id="prCodigo" placeholder="0121.xxxx.xx"></div>
+        <div class="field"><label>Descrição</label><input type="text" id="prDescricao" placeholder="Ex: CEBOLINHA - HIDROPÔNICO"></div>
+      </div>
+      <div class="row2">
+        <div class="field"><label>NCM</label><input type="text" id="prNcm" placeholder="07099990"></div>
+        <div class="field"><label>CFOP</label><input type="text" id="prCfop" value="5101"></div>
+      </div>
+      <div class="row2">
+        <div class="field"><label>Unidade</label><input type="text" id="prUnidade" value="UN"></div>
+        <div class="field"><label>Preço padrão (R$)</label><input type="number" step="0.01" id="prValor" placeholder="4.00"></div>
+      </div>
+      <button class="btn btn-primary" id="btnSalvarProduto" type="button">Salvar produto</button>
+      <button class="btn btn-ghost" id="btnCancelarEdicaoProduto" type="button" style="display:none;margin-left:8px;">Cancelar edição</button>
+    </div>
+  </section>
+
+  <!-- RELATÓRIO -->
+  <section class="panel" id="panel-relatorio">
+    <h2 class="sec">Relatório por mercado</h2>
+    <p class="muted" style="margin-top:-8px;">Considera só os pedidos já marcados como entregues, descontando as devoluções lançadas em cada um.</p>
+    <div class="card">
+      <div class="row2">
+        <div class="field"><label>De</label><input type="date" id="relDe"></div>
+        <div class="field"><label>Até</label><input type="date" id="relAte"></div>
+      </div>
+      <div style="display:flex;gap:8px;">
+        <button class="btn btn-primary btn-small" id="btnFiltrarRel" type="button">Filtrar</button>
+        <button class="btn btn-ghost btn-small" id="btnLimparRel" type="button">Limpar filtro</button>
+      </div>
+    </div>
+    <div class="card">
+      <table class="list" id="tabelaRelatorio"></table>
+    </div>
+    <div id="relatorioPedidosLista"></div>
+  </section>
+
+</div>
+
+<!-- MODAL RESUMO -->
+<div class="modal-bg" id="modalResumo">
+  <div class="modal">
+    <button class="modal-close" id="fecharModal">&times;</button>
+    <h3>Ficha para emissão da NFP-e</h3>
+    <div class="sub">Use estes dados para preencher o app Nota Fiscal Fácil (NFF) ou o Portal Receita/PR. Natureza da operação: <b>Venda</b> · CFOP <b>5101</b>.</div>
+    <div id="printArea">
+      <div class="resumo-block">
+        <h4>Destinatário</h4>
+        <div class="resumo-line" id="resumoDestinatario"></div>
+      </div>
+      <div class="resumo-block">
+        <h4>Itens</h4>
+        <div class="resumo-line" id="resumoItens"></div>
+      </div>
+    </div>
+    <textarea id="resumoTexto" readonly></textarea>
+    <div class="ticket-actions" style="margin-top:14px;">
+      <button class="btn btn-primary btn-small" id="btnCopiar" type="button">Copiar texto</button>
+      <button class="btn btn-ghost btn-small" id="btnImprimir" type="button">Imprimir</button>
+    </div>
+    <hr style="border:none;border-top:1px solid var(--line);margin:18px 0;">
+    <label>Número da nota emitida (opcional, preencha depois)</label>
+    <input type="text" id="notaNumero" placeholder="Ex: 4168469" style="margin-bottom:10px;">
+    <label>Chave de acesso (opcional)</label>
+    <input type="text" id="notaChave" placeholder="41.2604...">
+    <button class="btn btn-primary" id="btnSalvarNota" type="button" style="margin-top:14px;">Salvar dados da nota</button>
+  </div>
+</div>
+
+<!-- MODAL PREÇOS -->
+<div class="modal-bg" id="modalPrecos">
+  <div class="modal">
+    <button class="modal-close" id="fecharModalPrecos">&times;</button>
+    <h3 id="precosTitulo">Preços — cliente</h3>
+    <div class="sub">Deixe em branco pra usar o preço padrão do produto. Só preencha o que for diferente pra esse cliente.</div>
+    <div id="precosLista" style="max-height:50vh;overflow:auto;border:1px solid var(--line);border-radius:8px;"></div>
+    <button class="btn btn-primary" id="btnSalvarPrecos" type="button" style="margin-top:16px;">Salvar preços</button>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore-compat.js"></script>
+<script>
+  const firebaseConfig = {
+    apiKey: "AIzaSyCyZY92V3lUvChh2Fk_hhYiTFyLpdqiTys",
+    authDomain: "horta-f30f3.firebaseapp.com",
+    projectId: "horta-f30f3",
+    storageBucket: "horta-f30f3.firebasestorage.app",
+    messagingSenderId: "255881012749",
+    appId: "1:255881012749:web:2123e61b14099222329744"
+  };
+  firebase.initializeApp(firebaseConfig);
+  const db = firebase.firestore();
+</script>
+<script>
+// Lista alinhada com a ordem do talão físico da família (Alface Crespa -> Catalônia).
+// Itens com codigo "" ainda não têm o código interno confirmado pela família — o valor
+// e o NCM são estimativas e devem ser conferidos antes da emissão real.
+const DEFAULT_PRODUTOS = [
+  {codigo:"0121.1050.02", descricao:"ALFACE CRESPA - HIDROPÔNICO", ncm:"07051900", cfop:"5101", unidade:"UN", valor:4.00},
+  {codigo:"0121.1050.10", descricao:"ALFACE AMERICANA - HIDROPÔNICO", ncm:"07051900", cfop:"5101", unidade:"UN", valor:4.50},
+  {codigo:"", descricao:"ALFACE LISA", ncm:"07051900", cfop:"5101", unidade:"UN", valor:4.00},
+  {codigo:"", descricao:"ALFACE MIMOSA", ncm:"07051900", cfop:"5101", unidade:"UN", valor:4.50},
+  {codigo:"0121.1020.01", descricao:"AGRIÃO - HIDROPÔNICO", ncm:"07099990", cfop:"5101", unidade:"UN", valor:4.00},
+  {codigo:"", descricao:"ALHO PORÓ", ncm:"07039000", cfop:"5101", unidade:"UN", valor:5.00},
+  {codigo:"0121.1070.02", descricao:"ALMEIRÃO - HIDROPÔNICO", ncm:"07052100", cfop:"5101", unidade:"UN", valor:3.50},
+  {codigo:"", descricao:"BRÓCOLIS", ncm:"07049000", cfop:"5101", unidade:"UN", valor:4.50},
+  {codigo:"0121.1160.00", descricao:"COUVE (MINEIRA/CRESPA/MANTEIGA)", ncm:"07049000", cfop:"5101", unidade:"UN", valor:3.50},
+  {codigo:"", descricao:"CEBOLINHA", ncm:"07039000", cfop:"5101", unidade:"UN", valor:3.00},
+  {codigo:"", descricao:"CHICÓRIA", ncm:"07051900", cfop:"5101", unidade:"UN", valor:3.50},
+  {codigo:"0121.5130.01", descricao:"COENTRO - HIDROPÔNICO", ncm:"07099990", cfop:"5101", unidade:"UN", valor:2.75},
+  {codigo:"0121.1270.01", descricao:"RÚCULA OU PINCHÃO - HIDROPÔNICO", ncm:"07051900", cfop:"5101", unidade:"UN", valor:4.50},
+  {codigo:"", descricao:"RABANETE", ncm:"07069000", cfop:"5101", unidade:"UN", valor:4.00},
+  {codigo:"", descricao:"SALSA", ncm:"07099990", cfop:"5101", unidade:"UN", valor:2.75},
+  {codigo:"0121.5210.00", descricao:"HORTELÃ-PIMENTA OU MENTA (FOLHA)", ncm:"12119090", cfop:"5101", unidade:"UN", valor:2.75},
+  {codigo:"", descricao:"SERRALHA", ncm:"07099990", cfop:"5101", unidade:"UN", valor:2.75},
+  {codigo:"", descricao:"ESPINAFRE", ncm:"07051900", cfop:"5101", unidade:"UN", valor:4.00},
+  {codigo:"0121.5230.01", descricao:"MANJERICÃO OU ALFAVACA - HIDROPÔNICO", ncm:"12119090", cfop:"5101", unidade:"UN", valor:2.75},
+  {codigo:"", descricao:"CATALÔNIA", ncm:"07051900", cfop:"5101", unidade:"UN", valor:3.50},
+];
+
+const DEFAULT_CLIENTES = [
+  {id:"c1", apelido:"Muffato Duque", nome:"Irmãos Muffato & Cia Ltda", cnpj:"76.430.438/0030-06", endereco:"Avenida Duque de Caxias, 1200", bairro:"Igapó", municipio:"Londrina/PR", cep:"86015-000", ie:"9014488763"},
+  {id:"c2", apelido:"Muffato Bela Suíça", nome:"Irmãos Muffato & Cia Ltda", cnpj:"76.430.438/0044-01", endereco:"Avenida Madre Leônia Milito, 1175", bairro:"Bela Suíça", municipio:"Londrina/PR", cep:"86050-270", ie:"9038892255"},
+  {id:"c3", apelido:"Muffato Vivi Xavier", nome:"Irmãos Muffato & Cia Ltda", cnpj:"76.430.438/0035-10", endereco:"Avenida Saul Elkind, 2177", bairro:"Conjunto Vivi Xavier", municipio:"Londrina/PR", cep:"86082-000", ie:"9021445360"},
+];
+
+let produtos = [];
+let clientes = [];
+let pedidos = [];
+let precos = {}; // { [clienteId]: { [itemKey]: valorNumero } } — override de preço por cliente
+let currentResumoPedidoId = null;
+let currentPrecoClienteId = null;
+let editingProdutoId = null;
+
+function uid(){ return Date.now().toString(36) + Math.random().toString(36).slice(2,7); }
+
+async function loadAll(){
+  produtos = await getOrInit('produtos', DEFAULT_PRODUTOS);
+  clientes = await getOrInit('clientes', DEFAULT_CLIENTES);
+  pedidos = await getOrInit('pedidos', []);
+  precos = await getOrInit('precos', {});
+  renderClientesSelect();
+  renderClientesTable();
+  renderProdutosTable();
+  renderPedidos();
+  renderNpGrid();
+  document.getElementById('npData').valueAsDate = new Date();
+}
+
+async function getOrInit(key, def){
+  try{
+    const docRef = db.collection('horta_data').doc(key);
+    const snap = await docRef.get();
+    if(snap.exists && snap.data() && 'value' in snap.data()){
+      return snap.data().value;
+    }
+    await docRef.set({value: def});
+    return def;
+  }catch(e){
+    console.error(e);
+    showToast('Erro ao carregar dados. Verifique sua internet.');
+    return def;
+  }
+}
+async function save(key, data){
+  try{
+    await db.collection('horta_data').doc(key).set({value: data});
+  }catch(e){
+    console.error(e);
+    showToast('Erro ao salvar. Tente novamente.');
+  }
+}
+
+function showToast(msg){
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  setTimeout(()=>t.classList.remove('show'), 2200);
+}
+
+// TABS
+document.querySelectorAll('nav.tabs button').forEach(btn=>{
+  btn.addEventListener('click', ()=>{
+    document.querySelectorAll('nav.tabs button').forEach(b=>b.classList.remove('active'));
+    document.querySelectorAll('.panel').forEach(p=>p.classList.remove('active'));
+    btn.classList.add('active');
+    document.getElementById('panel-'+btn.dataset.tab).classList.add('active');
+  });
+});
+
+// CLIENTES
+function renderClientesSelect(){
+  const sel = document.getElementById('npCliente');
+  sel.innerHTML = clientes.map(c=>`<option value="${c.id}">${c.apelido || c.nome} — ${c.bairro}</option>`).join('');
+}
+function renderClientesTable(){
+  const t = document.getElementById('tabelaClientes');
+  if(clientes.length===0){ t.innerHTML = '<tr><td class="empty">Nenhum cliente cadastrado ainda.</td></tr>'; return; }
+  t.innerHTML = `<tr><th>Apelido</th><th>Razão social</th><th>CNPJ</th><th>Local</th><th></th></tr>` +
+    clientes.map(c=>`<tr><td>${c.apelido||'—'}</td><td>${c.nome}</td><td>${c.cnpj}</td><td>${c.bairro}, ${c.municipio}</td><td><button class="btn btn-ghost btn-small" data-action="precos" data-id="${c.id}">Preços</button></td></tr>`).join('');
+  t.querySelectorAll('[data-action="precos"]').forEach(b=>b.addEventListener('click', ()=>openPrecos(b.dataset.id)));
+}
+document.getElementById('btnSalvarCliente').addEventListener('click', async ()=>{
+  const nome = document.getElementById('clNome').value.trim();
+  const cnpj = document.getElementById('clCnpj').value.trim();
+  if(!nome || !cnpj){ showToast('Preencha ao menos nome e CNPJ.'); return; }
+  clientes.push({
+    id: uid(), nome, cnpj,
+    apelido: document.getElementById('clApelido').value.trim(),
+    endereco: document.getElementById('clEndereco').value.trim(),
+    bairro: document.getElementById('clBairro').value.trim(),
+    municipio: document.getElementById('clMunicipio').value.trim(),
+    cep: document.getElementById('clCep').value.trim(),
+    ie: document.getElementById('clIe').value.trim(),
+  });
+  await save('clientes', clientes);
+  renderClientesSelect(); renderClientesTable();
+  updateNpGridPrices();
+  ['clApelido','clNome','clCnpj','clEndereco','clBairro','clMunicipio','clCep','clIe'].forEach(id=>document.getElementById(id).value='');
+  showToast('Cliente salvo.');
+});
+
+// PRODUTOS
+function renderProdutosTable(){
+  const t = document.getElementById('tabelaProdutos');
+  if(produtos.length===0){ t.innerHTML = '<tr><td class="empty">Nenhum produto cadastrado.</td></tr>'; return; }
+  t.innerHTML = `<tr><th>Código</th><th>Descrição</th><th>Un.</th><th>Preço padrão</th><th></th></tr>` +
+    produtos.map(p=>`<tr><td>${p.codigo}</td><td>${p.descricao}</td><td>${p.unidade}</td><td>R$ ${p.valor.toFixed(2)}</td><td><button class="btn btn-ghost btn-small" data-action="editar-produto" data-codigo="${p.codigo}">Editar</button></td></tr>`).join('');
+  t.querySelectorAll('[data-action="editar-produto"]').forEach(b=>b.addEventListener('click', ()=>iniciarEdicaoProduto(b.dataset.codigo)));
+}
+function iniciarEdicaoProduto(codigo){
+  const p = produtos.find(x=>x.codigo===codigo);
+  if(!p) return;
+  editingProdutoId = codigo;
+  document.getElementById('prCodigo').value = p.codigo.startsWith('AVUL.') ? '' : p.codigo;
+  document.getElementById('prDescricao').value = p.descricao;
+  document.getElementById('prNcm').value = p.ncm || '';
+  document.getElementById('prCfop').value = p.cfop || '5101';
+  document.getElementById('prUnidade').value = p.unidade || 'UN';
+  document.getElementById('prValor').value = p.valor;
+  document.getElementById('btnSalvarProduto').textContent = 'Atualizar produto';
+  document.getElementById('btnCancelarEdicaoProduto').style.display = 'inline-block';
+  document.getElementById('prCodigo').scrollIntoView({behavior:'smooth', block:'center'});
+}
+function cancelarEdicaoProduto(){
+  editingProdutoId = null;
+  ['prCodigo','prDescricao','prNcm','prValor'].forEach(id=>document.getElementById(id).value='');
+  document.getElementById('prCfop').value='5101';
+  document.getElementById('prUnidade').value='UN';
+  document.getElementById('btnSalvarProduto').textContent = 'Salvar produto';
+  document.getElementById('btnCancelarEdicaoProduto').style.display = 'none';
+}
+document.getElementById('btnSalvarProduto').addEventListener('click', async ()=>{
+  const codigo = document.getElementById('prCodigo').value.trim();
+  const descricao = document.getElementById('prDescricao').value.trim();
+  const valor = parseFloat(document.getElementById('prValor').value);
+  if(!descricao || isNaN(valor)){ showToast('Preencha ao menos descrição e valor.'); return; }
+  if(editingProdutoId){
+    const p = produtos.find(x=>x.codigo===editingProdutoId);
+    if(p){
+      p.codigo = codigo || p.codigo;
+      p.descricao = descricao;
+      p.ncm = document.getElementById('prNcm').value.trim();
+      p.cfop = document.getElementById('prCfop').value.trim() || '5101';
+      p.unidade = document.getElementById('prUnidade').value.trim() || 'UN';
+      p.valor = valor;
+    }
+    await save('produtos', produtos);
+    renderProdutosTable(); renderNpProdutoOptions(); renderNpGrid();
+    cancelarEdicaoProduto();
+    showToast('Produto atualizado.');
+    return;
+  }
+  produtos.push({
+    codigo: codigo || ('AVUL.'+uid()),
+    descricao,
+    ncm: document.getElementById('prNcm').value.trim(),
+    cfop: document.getElementById('prCfop').value.trim() || '5101',
+    unidade: document.getElementById('prUnidade').value.trim() || 'UN',
+    valor,
+  });
+  await save('produtos', produtos);
+  renderProdutosTable(); renderNpProdutoOptions(); renderNpGrid();
+  ['prCodigo','prDescricao','prNcm','prValor'].forEach(id=>document.getElementById(id).value='');
+  document.getElementById('prCfop').value='5101';
+  document.getElementById('prUnidade').value='UN';
+  showToast('Produto salvo.');
+});
+document.getElementById('btnCancelarEdicaoProduto').addEventListener('click', cancelarEdicaoProduto);
+
+// NOVO PEDIDO — checklist estilo talão
+function renderNpGrid(){
+  const grid = document.getElementById('npGrid');
+  grid.innerHTML = produtos.map((p,i)=>`
+    <div class="np-row">
+      <span class="esp">${p.descricao}${!p.codigo ? '<span class="warn">●</span>' : ''} <span class="price-hint muted" data-index="${i}"></span></span>
+      <input type="number" class="np-grid-qtd" data-index="${i}" min="0" step="1" placeholder="0">
+    </div>`).join('');
+  updateNpGridPrices();
+}
+function updateNpGridPrices(){
+  const clienteId = document.getElementById('npCliente').value;
+  document.querySelectorAll('.price-hint').forEach(el=>{
+    const p = produtos[parseInt(el.dataset.index)];
+    const key = p.codigo || ('DESC:'+p.descricao);
+    el.textContent = '· R$ ' + getPreco(clienteId, key).toFixed(2);
+  });
+}
+function clearNpGrid(){
+  document.querySelectorAll('.np-grid-qtd').forEach(i=>i.value='');
+}
+
+// NOVO PEDIDO — itens avulsos dinâmicos
+function renderNpProdutoOptions(){
+  document.querySelectorAll('.np-produto').forEach(sel=>{
+    const cur = sel.value;
+    sel.innerHTML = produtos.map(p=>`<option value="${p.codigo}">${p.descricao}</option>`).join('');
+    if(cur) sel.value = cur;
+  });
+}
+function addItemRow(){
+  const wrap = document.getElementById('npItens');
+  const row = document.createElement('div');
+  row.className = 'row-item';
+  row.innerHTML = `
+    <div class="field" style="margin-bottom:0;">
+      <label>Produto</label>
+      <select class="np-produto">${produtos.map(p=>`<option value="${p.codigo}">${p.descricao}</option>`).join('')}</select>
+    </div>
+    <div class="field" style="margin-bottom:0;">
+      <label>Qtd.</label>
+      <input type="number" class="np-qtd" min="1" step="1" placeholder="0">
+    </div>
+    <button class="btn-remove" type="button" title="Remover item">&times;</button>
+  `;
+  row.querySelector('.btn-remove').addEventListener('click', ()=>{
+    if(wrap.children.length>1) row.remove();
+  });
+  wrap.appendChild(row);
+}
+document.getElementById('btnAddItem').addEventListener('click', addItemRow);
+document.getElementById('npCliente').addEventListener('change', updateNpGridPrices);
+
+document.getElementById('btnSalvarPedido').addEventListener('click', async ()=>{
+  const clienteId = document.getElementById('npCliente').value;
+  const data = document.getElementById('npData').value;
+  if(!clienteId){ showToast('Cadastre um cliente primeiro.'); return; }
+  const itens = [];
+  document.querySelectorAll('.np-grid-qtd').forEach(input=>{
+    const qtd = parseFloat(input.value);
+    if(qtd>0){
+      const p = produtos[parseInt(input.dataset.index)];
+      itens.push({codigo: p.codigo || ('DESC:'+p.descricao), quantidade: qtd});
+    }
+  });
+  document.querySelectorAll('#npItens .row-item').forEach(row=>{
+    const codigo = row.querySelector('.np-produto').value;
+    const qtd = parseFloat(row.querySelector('.np-qtd').value);
+    if(codigo && qtd>0) itens.push({codigo, quantidade: qtd});
+  });
+  if(itens.length===0){ showToast('Preencha a quantidade de ao menos uma espécie.'); return; }
+  pedidos.push({ id: uid(), clienteId, data, itens, status:'pendente', notaNumero:'', notaChave:'', dataEntrega:'' });
+  await save('pedidos', pedidos);
+  clearNpGrid();
+  document.getElementById('npItens').innerHTML='';
+  renderPedidos();
+  document.querySelector('nav.tabs button[data-tab="pedidos"]').click();
+  showToast('Pedido lançado.');
+});
+
+// PEDIDOS — render
+function clienteNome(id){ const c = clientes.find(x=>x.id===id); return c ? (c.apelido || c.nome) : '(cliente removido)'; }
+function produtoInfo(codigo){
+  if(codigo && codigo.startsWith('DESC:')){
+    const desc = codigo.slice(5);
+    return produtos.find(p=>p.descricao===desc) || {descricao:desc, codigo:'', ncm:'', cfop:'5101', valor:0, unidade:'UN'};
+  }
+  return produtos.find(p=>p.codigo===codigo) || {descricao:codigo, codigo:'', ncm:'', cfop:'5101', valor:0, unidade:'UN'};
+}
+function getPreco(clienteId, itemKey){
+  const overrides = precos[clienteId];
+  if(overrides && overrides[itemKey] != null && overrides[itemKey] !== '') return parseFloat(overrides[itemKey]);
+  return produtoInfo(itemKey).valor;
+}
+function pedidoTotal(pedido){
+  return pedido.itens.reduce((s,it)=> s + getPreco(pedido.clienteId, it.codigo) * it.quantidade, 0);
+}
+function fmtData(d){
+  if(!d) return '';
+  const [y,m,day] = d.split('-');
+  return `${day}/${m}/${y}`;
+}
+
+function renderPedidos(){
+  const pend = pedidos.filter(p=>p.status==='pendente').sort((a,b)=> a.data.localeCompare(b.data));
+  const entr = pedidos.filter(p=>p.status==='entregue').sort((a,b)=> b.data.localeCompare(a.data));
+
+  const pendEl = document.getElementById('listaPendentes');
+  pendEl.innerHTML = pend.length ? pend.map(ticketHTML).join('') : '<div class="empty">Nenhum pedido pendente. Lance um novo pedido na aba acima.</div>';
+
+  const entrEl = document.getElementById('listaEntregues');
+  entrEl.innerHTML = entr.length ? entr.map(ticketHTML).join('') : '<div class="empty">Nenhum pedido entregue ainda.</div>';
+
+  attachTicketListeners();
+  renderRelatorio();
+}
+
+function attachTicketListeners(){
+  document.querySelectorAll('[data-action="entregar"]').forEach(b=>b.addEventListener('click', onEntregar));
+  document.querySelectorAll('[data-action="resumo"]').forEach(b=>b.addEventListener('click', onVerResumo));
+  document.querySelectorAll('[data-action="excluir"]').forEach(b=>b.addEventListener('click', onExcluir));
+  document.querySelectorAll('.devolucao-input').forEach(inp=>inp.addEventListener('change', onDevolucaoChange));
+}
+
+async function onDevolucaoChange(e){
+  const p = pedidos.find(x=>x.id===e.target.dataset.id);
+  if(!p) return;
+  p.devolucaoValor = parseFloat(e.target.value) || 0;
+  await save('pedidos', pedidos);
+  renderPedidos();
+  showToast('Devolução registrada.');
+}
+
+function ticketHTML(p){
+  const total = pedidoTotal(p);
+  const devolucao = p.devolucaoValor || 0;
+  const liquido = total - devolucao;
+  const itensHtml = p.itens.map(it=>{
+    const info = produtoInfo(it.codigo);
+    return `<li><span>${info.descricao}</span><span class="qtd">${it.quantidade} ${info.unidade}</span></li>`;
+  }).join('');
+  const devolucaoHtml = p.status==='entregue' ? `
+    <div class="np-row" style="padding:8px 0;">
+      <span class="esp">Devolução / perda (R$)</span>
+      <input type="number" step="0.01" class="devolucao-input" data-id="${p.id}" value="${p.devolucaoValor || ''}" placeholder="0,00">
+    </div>
+    <div class="ticket-total" style="color:var(--forest-deep);"><span>Líquido a receber</span><span>R$ ${liquido.toFixed(2)}</span></div>
+  ` : '';
+  return `
+  <div class="ticket ${p.status}">
+    ${p.status==='entregue' ? '<div class="stamp">Entregue</div>' : ''}
+    <div class="ticket-head">
+      <div>
+        <div class="cliente">${clienteNome(p.clienteId)}</div>
+        <div class="meta">Pedido de ${fmtData(p.data)}${p.dataEntrega ? ' · entregue em '+fmtData(p.dataEntrega) : ''}</div>
+      </div>
+      <span class="tag ${p.status}">${p.status}</span>
+    </div>
+    <ul class="itens">${itensHtml}</ul>
+    <div class="ticket-total"><span>Total bruto</span><span>R$ ${total.toFixed(2)}</span></div>
+    ${devolucaoHtml}
+    ${p.notaNumero ? `<div class="muted" style="margin-top:6px;">Nota nº ${p.notaNumero}${p.notaChave ? ' · chave ...'+p.notaChave.slice(-6) : ''}</div>` : ''}
+    <div class="ticket-actions">
+      ${p.status==='pendente' ? `<button class="btn btn-primary btn-small" data-action="entregar" data-id="${p.id}">Marcar como entregue</button>` : `<button class="btn btn-ghost btn-small" data-action="resumo" data-id="${p.id}">Ver ficha da nota</button>`}
+      <button class="btn btn-danger btn-small" data-action="excluir" data-id="${p.id}">Excluir</button>
+    </div>
+  </div>`;
+}
+
+async function onEntregar(e){
+  const id = e.target.dataset.id;
+  const p = pedidos.find(x=>x.id===id);
+  p.status = 'entregue';
+  p.dataEntrega = new Date().toISOString().slice(0,10);
+  await save('pedidos', pedidos);
+  renderPedidos();
+  openResumo(id);
+}
+function onVerResumo(e){ openResumo(e.target.dataset.id); }
+async function onExcluir(e){
+  const id = e.target.dataset.id;
+  if(!confirm('Excluir este pedido?')) return;
+  pedidos = pedidos.filter(x=>x.id!==id);
+  await save('pedidos', pedidos);
+  renderPedidos();
+}
+
+function openResumo(id){
+  currentResumoPedidoId = id;
+  const p = pedidos.find(x=>x.id===id);
+  const c = clientes.find(x=>x.id===p.clienteId);
+  const total = pedidoTotal(p);
+
+  document.getElementById('resumoDestinatario').textContent =
+`${c.nome}
+CNPJ: ${c.cnpj}    IE: ${c.ie}
+${c.endereco} — ${c.bairro}
+${c.municipio}    CEP: ${c.cep}`;
+
+  const linhas = p.itens.map(it=>{
+    const info = produtoInfo(it.codigo);
+    const valorAplicado = getPreco(p.clienteId, it.codigo);
+    const vtotal = valorAplicado * it.quantidade;
+    const cabecalho = info.codigo ? `${info.codigo}  ${info.descricao}` : `${info.descricao}  (código a definir)`;
+    return `${cabecalho}\n  NCM ${info.ncm||'—'}  CFOP ${info.cfop}  ${it.quantidade} ${info.unidade} x R$ ${valorAplicado.toFixed(2)} = R$ ${vtotal.toFixed(2)}`;
+  }).join('\n\n');
+  document.getElementById('resumoItens').textContent = linhas + `\n\nTOTAL DA NOTA: R$ ${total.toFixed(2)}`;
+
+  const textoCompleto =
+`FICHA PARA EMISSÃO — NFP-e
+Natureza da operação: Venda | CFOP 5101
+Data do pedido: ${fmtData(p.data)} | Entrega: ${fmtData(p.dataEntrega)}
+
+DESTINATÁRIO
+${c.nome}
+CNPJ: ${c.cnpj} | IE: ${c.ie}
+${c.endereco} — ${c.bairro}
+${c.municipio} | CEP: ${c.cep}
+
+ITENS
+${linhas}
+
+TOTAL DA NOTA: R$ ${total.toFixed(2)}`;
+  document.getElementById('resumoTexto').value = textoCompleto;
+  document.getElementById('notaNumero').value = p.notaNumero || '';
+  document.getElementById('notaChave').value = p.notaChave || '';
+  document.getElementById('modalResumo').classList.add('open');
+}
+
+document.getElementById('fecharModal').addEventListener('click', ()=> document.getElementById('modalResumo').classList.remove('open'));
+document.getElementById('modalResumo').addEventListener('click', (e)=>{ if(e.target.id==='modalResumo') e.currentTarget.classList.remove('open'); });
+
+document.getElementById('btnCopiar').addEventListener('click', async ()=>{
+  const txt = document.getElementById('resumoTexto').value;
+  try{
+    await navigator.clipboard.writeText(txt);
+    showToast('Texto copiado.');
+  }catch(e){
+    document.getElementById('resumoTexto').select();
+    showToast('Selecione e copie manualmente (Ctrl+C).');
+  }
+});
+document.getElementById('btnImprimir').addEventListener('click', ()=> window.print());
+
+document.getElementById('btnSalvarNota').addEventListener('click', async ()=>{
+  const p = pedidos.find(x=>x.id===currentResumoPedidoId);
+  if(!p) return;
+  p.notaNumero = document.getElementById('notaNumero').value.trim();
+  p.notaChave = document.getElementById('notaChave').value.trim();
+  await save('pedidos', pedidos);
+  renderPedidos();
+  showToast('Dados da nota salvos.');
+  document.getElementById('modalResumo').classList.remove('open');
+});
+
+function openPrecos(clienteId){
+  currentPrecoClienteId = clienteId;
+  const c = clientes.find(x=>x.id===clienteId);
+  document.getElementById('precosTitulo').textContent = 'Preços — ' + (c.apelido || c.nome);
+  const overrides = precos[clienteId] || {};
+  document.getElementById('precosLista').innerHTML = produtos.map(p=>{
+    const key = p.codigo || ('DESC:'+p.descricao);
+    const val = overrides[key];
+    return `<div class="np-row" style="padding:8px 12px;">
+      <span class="esp">${p.descricao}<span class="muted"> · padrão R$ ${p.valor.toFixed(2)}</span></span>
+      <input type="number" step="0.01" class="preco-input" data-key="${key}" placeholder="${p.valor.toFixed(2)}" value="${val!=null && val!=='' ? val : ''}">
+    </div>`;
+  }).join('');
+  document.getElementById('modalPrecos').classList.add('open');
+}
+document.getElementById('fecharModalPrecos').addEventListener('click', ()=> document.getElementById('modalPrecos').classList.remove('open'));
+document.getElementById('modalPrecos').addEventListener('click', (e)=>{ if(e.target.id==='modalPrecos') e.currentTarget.classList.remove('open'); });
+
+document.getElementById('btnSalvarPrecos').addEventListener('click', async ()=>{
+  const overrides = {};
+  document.querySelectorAll('.preco-input').forEach(inp=>{
+    if(inp.value !== '') overrides[inp.dataset.key] = parseFloat(inp.value);
+  });
+  precos[currentPrecoClienteId] = overrides;
+  await save('precos', precos);
+  renderPedidos();
+  showToast('Preços salvos.');
+  document.getElementById('modalPrecos').classList.remove('open');
+});
+
+// RELATÓRIO POR MERCADO
+function renderRelatorio(){
+  const de = document.getElementById('relDe') ? document.getElementById('relDe').value : '';
+  const ate = document.getElementById('relAte') ? document.getElementById('relAte').value : '';
+  const entregues = pedidos.filter(p=>p.status==='entregue' && (!de || p.dataEntrega>=de) && (!ate || p.dataEntrega<=ate));
+
+  const porCliente = {};
+  entregues.forEach(p=>{
+    const total = pedidoTotal(p);
+    const dev = p.devolucaoValor || 0;
+    if(!porCliente[p.clienteId]) porCliente[p.clienteId] = {pedidos:0, bruto:0, devolucao:0};
+    porCliente[p.clienteId].pedidos++;
+    porCliente[p.clienteId].bruto += total;
+    porCliente[p.clienteId].devolucao += dev;
+  });
+
+  const tabela = document.getElementById('tabelaRelatorio');
+  if(!tabela) return;
+  const ids = Object.keys(porCliente);
+  if(ids.length===0){
+    tabela.innerHTML = '<tr><td class="empty">Nenhum pedido entregue no período.</td></tr>';
+    const listaVazia = document.getElementById('relatorioPedidosLista');
+    if(listaVazia) listaVazia.innerHTML = '';
+    return;
+  }
+
+  let totBruto=0, totDev=0, totLiq=0;
+  let linhas = ids.map(id=>{
+    const c = clientes.find(x=>x.id===id);
+    const d = porCliente[id];
+    const liq = d.bruto - d.devolucao;
+    totBruto += d.bruto; totDev += d.devolucao; totLiq += liq;
+    return `<tr><td>${c ? (c.apelido||c.nome) : '(removido)'}</td><td>${d.pedidos}</td><td>R$ ${d.bruto.toFixed(2)}</td><td>R$ ${d.devolucao.toFixed(2)}</td><td><b>R$ ${liq.toFixed(2)}</b></td></tr>`;
+  }).join('');
+
+  tabela.innerHTML = `<tr><th>Mercado</th><th>Pedidos</th><th>Bruto</th><th>Devolução</th><th>Líquido</th></tr>` +
+    linhas +
+    `<tr style="border-top:2px solid var(--forest);"><td><b>Total</b></td><td><b>${entregues.length}</b></td><td><b>R$ ${totBruto.toFixed(2)}</b></td><td><b>R$ ${totDev.toFixed(2)}</b></td><td><b>R$ ${totLiq.toFixed(2)}</b></td></tr>`;
+
+  const listaEl = document.getElementById('relatorioPedidosLista');
+  if(listaEl){
+    if(entregues.length){
+      const ordenados = [...entregues].sort((a,b)=> b.dataEntrega.localeCompare(a.dataEntrega));
+      listaEl.innerHTML = '<h2 class="sec" style="margin-top:24px;">Pedidos entregues no período</h2>' + ordenados.map(ticketHTML).join('');
+      attachTicketListeners();
+    } else {
+      listaEl.innerHTML = '';
+    }
+  }
+}
+document.getElementById('btnFiltrarRel').addEventListener('click', renderRelatorio);
+document.getElementById('btnLimparRel').addEventListener('click', ()=>{
+  document.getElementById('relDe').value=''; document.getElementById('relAte').value='';
+  renderRelatorio();
+});
+
+loadAll();
+</script>
+</body>
+</html>

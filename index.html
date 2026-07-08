@@ -180,6 +180,20 @@
   .shared-note{font-size:11.5px;color:var(--ink-soft);background:#fff;border:1px solid var(--line);
     border-radius:8px;padding:9px 12px;margin-bottom:16px;}
 
+  .login-screen{
+    min-height:100vh;display:flex;align-items:center;justify-content:center;
+    background:var(--paper);padding:20px;
+  }
+  .login-card{
+    background:var(--paper-card);border:1px solid var(--line);border-radius:12px;
+    box-shadow:var(--shadow);padding:32px 28px;max-width:360px;width:100%;
+  }
+  .login-card h1{
+    font-family:'Fraunces',serif;font-weight:700;font-size:26px;margin:0 0 4px;color:var(--forest-deep);
+  }
+  .login-sub{font-size:13px;color:var(--ink-soft);margin:0 0 20px;}
+  .login-erro{color:var(--red);font-size:12.5px;margin:-6px 0 12px;min-height:16px;}
+
   @media print{
     body *{visibility:hidden;}
     #printArea, #printArea *{visibility:visible;}
@@ -188,7 +202,25 @@
 </style>
 </head>
 <body>
-<div class="wrap">
+
+<div id="loginScreen" class="login-screen">
+  <div class="login-card">
+    <h1>Horta Terassi</h1>
+    <p class="login-sub">Entre com seu usuário e senha pra acessar o painel</p>
+    <div class="field">
+      <label>E-mail</label>
+      <input type="text" id="loginEmail" autocomplete="username" placeholder="seuemail@exemplo.com">
+    </div>
+    <div class="field">
+      <label>Senha</label>
+      <input type="password" id="loginSenha" autocomplete="current-password" placeholder="••••••••">
+    </div>
+    <div id="loginErro" class="login-erro"></div>
+    <button class="btn btn-primary" id="btnLogin" type="button" style="width:100%;">Entrar</button>
+  </div>
+</div>
+
+<div class="wrap" id="appContent" style="display:none;">
 
   <header class="top">
     <div class="brand">
@@ -199,6 +231,7 @@
       FABRICIO INACIO TERASSI · CPF 035.356.189-40<br>
       IE 9593472202 · Bela Vista do Paraíso/PR
     </div>
+    <button class="btn btn-ghost btn-small" id="btnLogout" type="button">Sair</button>
   </header>
 
   <nav class="tabs">
@@ -360,6 +393,7 @@
 
 <script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-auth-compat.js"></script>
 <script>
   const firebaseConfig = {
     apiKey: "AIzaSyCyZY92V3lUvChh2Fk_hhYiTFyLpdqiTys",
@@ -371,6 +405,7 @@
   };
   firebase.initializeApp(firebaseConfig);
   const db = firebase.firestore();
+  const auth = firebase.auth();
 </script>
 <script>
 // Lista alinhada com a ordem do talão físico da família (Alface Crespa -> Catalônia).
@@ -505,9 +540,19 @@ document.getElementById('btnSalvarCliente').addEventListener('click', async ()=>
 function renderProdutosTable(){
   const t = document.getElementById('tabelaProdutos');
   if(produtos.length===0){ t.innerHTML = '<tr><td class="empty">Nenhum produto cadastrado.</td></tr>'; return; }
-  t.innerHTML = `<tr><th>Código</th><th>Descrição</th><th>Un.</th><th>Preço padrão</th><th></th></tr>` +
-    produtos.map(p=>`<tr><td>${p.codigo}</td><td>${p.descricao}</td><td>${p.unidade}</td><td>R$ ${p.valor.toFixed(2)}</td><td><button class="btn btn-ghost btn-small" data-action="editar-produto" data-codigo="${p.codigo}">Editar</button></td></tr>`).join('');
+  t.innerHTML = `<tr><th>Código</th><th>Descrição</th><th>Un.</th><th>Preço padrão</th><th></th><th></th></tr>` +
+    produtos.map(p=>`<tr><td>${p.codigo}</td><td>${p.descricao}</td><td>${p.unidade}</td><td>R$ ${p.valor.toFixed(2)}</td><td><button class="btn btn-ghost btn-small" data-action="editar-produto" data-codigo="${p.codigo}">Editar</button></td><td><button class="btn btn-danger btn-small" data-action="excluir-produto" data-codigo="${p.codigo}">Excluir</button></td></tr>`).join('');
   t.querySelectorAll('[data-action="editar-produto"]').forEach(b=>b.addEventListener('click', ()=>iniciarEdicaoProduto(b.dataset.codigo)));
+  t.querySelectorAll('[data-action="excluir-produto"]').forEach(b=>b.addEventListener('click', ()=>excluirProduto(b.dataset.codigo)));
+}
+async function excluirProduto(codigo){
+  const p = produtos.find(x=>x.codigo===codigo);
+  if(!p) return;
+  if(!confirm(`Excluir "${p.descricao}" da lista de produtos? Pedidos já lançados com esse item continuam normais.`)) return;
+  produtos = produtos.filter(x=>x.codigo!==codigo);
+  await save('produtos', produtos);
+  renderProdutosTable(); renderNpProdutoOptions(); renderNpGrid();
+  showToast('Produto excluído.');
 }
 function iniciarEdicaoProduto(codigo){
   const p = produtos.find(x=>x.codigo===codigo);
@@ -910,7 +955,41 @@ document.getElementById('btnLimparRel').addEventListener('click', ()=>{
   renderRelatorio();
 });
 
-loadAll();
+// LOGIN / AUTENTICAÇÃO
+let jaCarregou = false;
+
+auth.onAuthStateChanged(async (user)=>{
+  if(user){
+    document.getElementById('loginScreen').style.display = 'none';
+    document.getElementById('appContent').style.display = 'block';
+    if(!jaCarregou){
+      jaCarregou = true;
+      await loadAll();
+    }
+  } else {
+    jaCarregou = false;
+    document.getElementById('appContent').style.display = 'none';
+    document.getElementById('loginScreen').style.display = 'flex';
+  }
+});
+
+async function fazerLogin(){
+  const email = document.getElementById('loginEmail').value.trim();
+  const senha = document.getElementById('loginSenha').value;
+  const erroEl = document.getElementById('loginErro');
+  erroEl.textContent = '';
+  if(!email || !senha){ erroEl.textContent = 'Preencha e-mail e senha.'; return; }
+  try{
+    await auth.signInWithEmailAndPassword(email, senha);
+  }catch(e){
+    erroEl.textContent = 'E-mail ou senha incorretos.';
+  }
+}
+document.getElementById('btnLogin').addEventListener('click', fazerLogin);
+document.getElementById('loginSenha').addEventListener('keydown', (e)=>{ if(e.key==='Enter') fazerLogin(); });
+document.getElementById('loginEmail').addEventListener('keydown', (e)=>{ if(e.key==='Enter') fazerLogin(); });
+document.getElementById('btnLogout').addEventListener('click', ()=> auth.signOut());
+
 </script>
 </body>
 </html>

@@ -125,6 +125,11 @@
   .ticket.pendente::before{background:var(--gold);}
   .ticket.entregue::before{background:var(--leaf);}
   .ticket-head{display:flex;justify-content:space-between;align-items:flex-start;gap:10px;margin-bottom:8px;}
+  .ticket-head.toggleable{cursor:pointer;}
+  .ticket.collapsed .ticket-head{margin-bottom:0;}
+  .ticket-body{overflow:hidden;}
+  .ticket.collapsed .ticket-body{display:none;}
+  .chevron{font-size:11px;color:var(--ink-soft);transition:.15s;}
   .ticket-head .cliente{font-family:'Fraunces',serif;font-weight:600;font-size:17px;color:var(--forest-deep);}
   .ticket-head .meta{font-family:'IBM Plex Mono',monospace;font-size:11.5px;color:var(--ink-soft);margin-top:2px;}
   .tag{font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;
@@ -201,7 +206,8 @@
   @media print{
     body *{visibility:hidden;}
     #printArea, #printArea *{visibility:visible;}
-    #printArea{position:absolute;left:0;top:0;width:100%;padding:20px;}
+    #printArea{position:absolute;left:0;top:0;width:100%;padding:0;margin:0;border:none;}
+    @page{ margin:6mm; }
   }
 </style>
 </head>
@@ -251,7 +257,13 @@
   <section class="panel active" id="panel-pedidos">
     <h2 class="sec">Pendentes de entrega</h2>
     <div id="listaPendentes"></div>
-    <h2 class="sec" style="margin-top:26px;">Entregues</h2>
+    <h2 class="sec" style="margin-top:26px;display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;">
+      <span>Entregues</span>
+      <span style="display:flex;gap:6px;">
+        <button class="btn btn-ghost btn-small" id="btnExpandirTodos" type="button">Expandir todos</button>
+        <button class="btn btn-ghost btn-small" id="btnRecolherTodos" type="button">Recolher todos</button>
+      </span>
+    </h2>
     <div id="listaEntregues"></div>
   </section>
 
@@ -401,16 +413,18 @@
   <div class="modal">
     <button class="modal-close" id="fecharModal">&times;</button>
     <h3>Ficha para emissão da NFP-e</h3>
-    <div class="sub">Use estes dados para preencher o app Nota Fiscal Fácil (NFF) ou o Portal Receita/PR. Natureza da operação: <b>Venda</b> · CFOP <b>5101</b>.</div>
-    <div id="printArea">
-      <div class="resumo-block">
-        <h4>Destinatário</h4>
-        <div class="resumo-line" id="resumoDestinatario"></div>
+    <div class="sub">Use estes dados pra preencher as abas do Portal Receita/PR (Emitente, Destinatário, Identificação da Nota, Local de Retirada/Entrega, Produtos, Transporte, Resumo).</div>
+    <div class="resumo-block" id="printArea">
+      <h4>Prévia de impressão</h4>
+      <pre class="resumo-line" id="printFicha" style="margin:0;"></pre>
+    </div>
+    <div class="resumo-block">
+      <h4>Transporte (você usa veículo próprio na entrega)</h4>
+      <div class="row2">
+        <div class="field" style="margin-bottom:0;"><label>Placa do veículo</label><input type="text" id="transportePlaca" placeholder="ABC1D23"></div>
+        <div class="field" style="margin-bottom:0;"><label>UF do veículo</label><input type="text" id="transporteUf" placeholder="PR" maxlength="2" style="text-transform:uppercase;"></div>
       </div>
-      <div class="resumo-block">
-        <h4>Itens</h4>
-        <div class="resumo-line" id="resumoItens"></div>
-      </div>
+      <p class="muted" style="margin:8px 0 0;">Fica salvo pra próxima vez — só mude se trocar de veículo.</p>
     </div>
     <textarea id="resumoTexto" readonly></textarea>
     <div class="ticket-actions" style="margin-top:14px;">
@@ -493,6 +507,8 @@ let produtos = [];
 let clientes = [];
 let pedidos = [];
 let precos = {}; // { [clienteId]: { [itemKey]: valorNumero } } — override de preço por cliente
+let transporteConfig = { placa:'', uf:'PR' }; // dados do veículo próprio usado na entrega (Portal Receita/PR)
+let ticketsExpandidos = new Set(); // ids de pedidos ENTREGUES que a usuária abriu manualmente (ficam retraídos por padrão)
 let currentResumoPedidoId = null;
 let currentPrecoClienteId = null;
 let editingProdutoId = null;
@@ -505,6 +521,7 @@ async function loadAll(){
   clientes = await getOrInit('clientes', DEFAULT_CLIENTES);
   pedidos = await getOrInit('pedidos', []);
   precos = await getOrInit('precos', {});
+  transporteConfig = await getOrInit('transporte', { placa:'', uf:'PR' });
   renderClientesSelect();
   renderClientesTable();
   renderProdutosTable();
@@ -847,6 +864,14 @@ function attachTicketListeners(){
   document.querySelectorAll('[data-action="reabrir"]').forEach(b=>b.addEventListener('click', onReabrir));
   document.querySelectorAll('[data-action="editar-itens"]').forEach(b=>b.addEventListener('click', ()=>iniciarEdicaoPedido(b.dataset.id)));
   document.querySelectorAll('.devolucao-input').forEach(inp=>inp.addEventListener('change', onDevolucaoChange));
+  document.querySelectorAll('[data-action="toggle"]').forEach(el=>el.addEventListener('click', onToggleTicket));
+}
+
+function onToggleTicket(e){
+  const id = e.currentTarget.dataset.id;
+  if(ticketsExpandidos.has(id)) ticketsExpandidos.delete(id);
+  else ticketsExpandidos.add(id);
+  renderPedidos();
 }
 
 async function onDevolucaoChange(e){
@@ -885,25 +910,34 @@ function ticketHTML(p){
     <div class="muted" style="text-align:right;margin-top:2px;">Valor da perda: R$ ${devolucao.toFixed(2)}</div>
     <div class="ticket-total" style="color:var(--forest-deep);"><span>Líquido a receber</span><span>R$ ${liquido.toFixed(2)}</span></div>
   ` : '';
+
+  const isEntregue = p.status === 'entregue';
+  const collapsed = isEntregue && !ticketsExpandidos.has(p.id);
+
   return `
-  <div class="ticket ${p.status}">
-    ${p.status==='entregue' ? '<div class="stamp">Entregue</div>' : ''}
-    <div class="ticket-head">
+  <div class="ticket ${p.status}${collapsed ? ' collapsed' : ''}">
+    ${isEntregue ? '<div class="stamp">Entregue</div>' : ''}
+    <div class="ticket-head${isEntregue ? ' toggleable' : ''}" ${isEntregue ? `data-action="toggle" data-id="${p.id}"` : ''}>
       <div>
-        <div class="cliente">${clienteNome(p.clienteId)}</div>
+        <div class="cliente">${clienteNome(p.clienteId)}${collapsed ? ` <span class="muted" style="font-weight:400;font-size:12.5px;">· líquido R$ ${liquido.toFixed(2)}</span>` : ''}</div>
         <div class="meta">Pedido de ${fmtData(p.data)}${p.dataEntrega ? ' · entregue em '+fmtData(p.dataEntrega) : ''}</div>
       </div>
-      <span class="tag ${p.status}">${p.status}</span>
+      <div style="display:flex;align-items:center;gap:8px;">
+        <span class="tag ${p.status}">${p.status}</span>
+        ${isEntregue ? `<span class="chevron">${collapsed ? '▸' : '▾'}</span>` : ''}
+      </div>
     </div>
-    <ul class="itens">${itensHtml}</ul>
-    <div class="ticket-total"><span>Total bruto</span><span>R$ ${total.toFixed(2)}</span></div>
-    ${devolucaoHtml}
-    ${p.notaNumero ? `<div class="muted" style="margin-top:6px;">Nota nº ${p.notaNumero}${p.notaChave ? ' · chave ...'+p.notaChave.slice(-6) : ''}</div>` : ''}
-    <div class="ticket-actions">
-      ${p.status==='pendente' ? `<button class="btn btn-primary btn-small" data-action="entregar" data-id="${p.id}">Marcar como entregue</button>` : `<button class="btn btn-ghost btn-small" data-action="resumo" data-id="${p.id}">Ver ficha da nota</button>`}
-      ${p.status==='pendente' ? `<button class="btn btn-ghost btn-small" data-action="editar-itens" data-id="${p.id}">Editar itens</button>` : ''}
-      ${p.status==='entregue' ? `<button class="btn btn-ghost btn-small" data-action="reabrir" data-id="${p.id}">Reabrir pedido</button>` : ''}
-      <button class="btn btn-danger btn-small" data-action="excluir" data-id="${p.id}">Excluir</button>
+    <div class="ticket-body">
+      <ul class="itens">${itensHtml}</ul>
+      <div class="ticket-total"><span>Total bruto</span><span>R$ ${total.toFixed(2)}</span></div>
+      ${devolucaoHtml}
+      ${p.notaNumero ? `<div class="muted" style="margin-top:6px;">Nota nº ${p.notaNumero}${p.notaChave ? ' · chave ...'+p.notaChave.slice(-6) : ''}</div>` : ''}
+      <div class="ticket-actions">
+        ${p.status==='pendente' ? `<button class="btn btn-primary btn-small" data-action="entregar" data-id="${p.id}">Marcar como entregue</button>` : `<button class="btn btn-ghost btn-small" data-action="resumo" data-id="${p.id}">Ver ficha da nota</button>`}
+        ${p.status==='pendente' ? `<button class="btn btn-ghost btn-small" data-action="editar-itens" data-id="${p.id}">Editar itens</button>` : ''}
+        ${p.status==='entregue' ? `<button class="btn btn-ghost btn-small" data-action="reabrir" data-id="${p.id}">Reabrir pedido</button>` : ''}
+        <button class="btn btn-danger btn-small" data-action="excluir" data-id="${p.id}">Excluir</button>
+      </div>
     </div>
   </div>`;
 }
@@ -943,47 +977,92 @@ async function onReabrir(e){
   showToast('Pedido reaberto. Você já pode editar os itens.');
 }
 
-function openResumo(id){
-  currentResumoPedidoId = id;
-  const p = pedidos.find(x=>x.id===id);
-  const c = clientes.find(x=>x.id===p.clienteId);
-  const total = pedidoTotal(p);
+const EMITENTE_TXT = `FABRICIO INACIO TERASSI
+CPF: 035.356.189-40 | IE: 9593472202
+Bela Vista do Paraíso/PR`;
 
-  document.getElementById('resumoDestinatario').textContent =
-`${c.nome}
-CNPJ: ${c.cnpj}    IE: ${c.ie}
+function gerarTextoFicha(p, c, linhas, total){
+  const placa = (document.getElementById('transportePlaca').value || '').trim();
+  const uf = (document.getElementById('transporteUf').value || 'PR').trim().toUpperCase();
+  return `FICHA PARA EMISSÃO — NFP-e (Portal Receita/PR)
+
+== EMITENTE ==
+${EMITENTE_TXT}
+
+== DESTINATÁRIO ==
+${c.nome}
+CNPJ: ${c.cnpj} | IE: ${c.ie}
 ${c.endereco} — ${c.bairro}
-${c.municipio}    CEP: ${c.cep}`;
+${c.municipio} | CEP: ${c.cep}
 
-  const linhas = p.itens.map(it=>{
+== IDENTIFICAÇÃO DA NOTA ==
+Natureza da operação: Venda de produção do estabelecimento
+Tipo de operação: Saída | Finalidade da emissão: NF-e normal
+CFOP: 5101 (venda dentro do PR — confira se muda pra 6101 em venda interestadual)
+Data do pedido: ${fmtData(p.data)} | Data/hora de saída: ${fmtData(p.dataEntrega)}
+Indicador de presença do comprador: Não presencial, outros (pedido combinado antes por telefone/WhatsApp, entrega feita depois)
+Consumidor final: Não (venda para contribuinte do ICMS)
+
+== LOCAL DE RETIRADA/ENTREGA ==
+Retirada: padrão do sistema — mesma propriedade do emitente (não precisa preencher no site)
+Entrega: padrão do sistema — mesmo endereço do destinatário acima (não precisa preencher no site)
+
+== PRODUTOS ==
+${linhas}
+
+== TRANSPORTE ==
+Modalidade do frete: Transporte próprio por conta do remetente/emitente (veículo próprio)
+Placa do veículo: ${placa || '(preencher)'} | UF: ${uf || 'PR'}
+
+== RESUMO ==
+TOTAL DA NOTA: R$ ${total.toFixed(2)}`;
+}
+
+function montarLinhasItens(p){
+  return p.itens.map(it=>{
     const info = produtoInfo(it.codigo);
     const valorAplicado = getPreco(p.clienteId, it.codigo);
     const vtotal = valorAplicado * it.quantidade;
     const cabecalho = info.codigo ? `${info.codigo}  ${info.descricao}` : `${info.descricao}  (código a definir)`;
     return `${cabecalho}\n  NCM ${info.ncm||'—'}  CFOP ${info.cfop}  ${it.quantidade} ${info.unidade} x R$ ${valorAplicado.toFixed(2)} = R$ ${vtotal.toFixed(2)}`;
   }).join('\n\n');
-  document.getElementById('resumoItens').textContent = linhas + `\n\nTOTAL DA NOTA: R$ ${total.toFixed(2)}`;
+}
 
-  const textoCompleto =
-`FICHA PARA EMISSÃO — NFP-e
-Natureza da operação: Venda | CFOP 5101
-Data do pedido: ${fmtData(p.data)} | Entrega: ${fmtData(p.dataEntrega)}
+function atualizarFicha(p, c){
+  const total = pedidoTotal(p);
+  const linhas = montarLinhasItens(p);
+  const texto = gerarTextoFicha(p, c, linhas, total);
+  document.getElementById('resumoTexto').value = texto;
+  document.getElementById('printFicha').textContent = texto;
+}
 
-DESTINATÁRIO
-${c.nome}
-CNPJ: ${c.cnpj} | IE: ${c.ie}
-${c.endereco} — ${c.bairro}
-${c.municipio} | CEP: ${c.cep}
+function openResumo(id){
+  currentResumoPedidoId = id;
+  const p = pedidos.find(x=>x.id===id);
+  const c = clientes.find(x=>x.id===p.clienteId);
 
-ITENS
-${linhas}
+  document.getElementById('transportePlaca').value = transporteConfig.placa || '';
+  document.getElementById('transporteUf').value = transporteConfig.uf || 'PR';
 
-TOTAL DA NOTA: R$ ${total.toFixed(2)}`;
-  document.getElementById('resumoTexto').value = textoCompleto;
+  atualizarFicha(p, c);
   document.getElementById('notaNumero').value = p.notaNumero || '';
   document.getElementById('notaChave').value = p.notaChave || '';
   document.getElementById('modalResumo').classList.add('open');
 }
+
+async function onTransporteChange(){
+  const p = pedidos.find(x=>x.id===currentResumoPedidoId);
+  if(!p) return;
+  const c = clientes.find(x=>x.id===p.clienteId);
+  atualizarFicha(p, c);
+  transporteConfig = {
+    placa: document.getElementById('transportePlaca').value.trim(),
+    uf: document.getElementById('transporteUf').value.trim().toUpperCase()
+  };
+  await save('transporte', transporteConfig);
+}
+document.getElementById('transportePlaca').addEventListener('change', onTransporteChange);
+document.getElementById('transporteUf').addEventListener('change', onTransporteChange);
 
 document.getElementById('fecharModal').addEventListener('click', ()=> document.getElementById('modalResumo').classList.remove('open'));
 document.getElementById('modalResumo').addEventListener('click', (e)=>{ if(e.target.id==='modalResumo') e.currentTarget.classList.remove('open'); });
@@ -998,7 +1077,13 @@ document.getElementById('btnCopiar').addEventListener('click', async ()=>{
     showToast('Selecione e copie manualmente (Ctrl+C).');
   }
 });
-document.getElementById('btnImprimir').addEventListener('click', ()=> window.print());
+let imprimindo = false;
+document.getElementById('btnImprimir').addEventListener('click', ()=>{
+  if(imprimindo) return;
+  imprimindo = true;
+  window.print();
+  setTimeout(()=>{ imprimindo = false; }, 1500);
+});
 
 document.getElementById('btnSalvarNota').addEventListener('click', async ()=>{
   const p = pedidos.find(x=>x.id===currentResumoPedidoId);
@@ -1206,6 +1291,15 @@ document.getElementById('btnLimparPerdas').addEventListener('click', ()=>{
 });
 document.getElementById('pdAgrupar').addEventListener('change', renderPerdas);
 document.getElementById('pdMetrica').addEventListener('change', renderPerdas);
+
+document.getElementById('btnExpandirTodos').addEventListener('click', ()=>{
+  pedidos.filter(p=>p.status==='entregue').forEach(p=> ticketsExpandidos.add(p.id));
+  renderPedidos();
+});
+document.getElementById('btnRecolherTodos').addEventListener('click', ()=>{
+  ticketsExpandidos.clear();
+  renderPedidos();
+});
 
 document.getElementById('btnFiltrarRel').addEventListener('click', renderRelatorio);
 document.getElementById('btnLimparRel').addEventListener('click', ()=>{

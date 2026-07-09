@@ -125,11 +125,6 @@
   .ticket.pendente::before{background:var(--gold);}
   .ticket.entregue::before{background:var(--leaf);}
   .ticket-head{display:flex;justify-content:space-between;align-items:flex-start;gap:10px;margin-bottom:8px;}
-  .ticket-head.toggleable{cursor:pointer;}
-  .ticket.collapsed .ticket-head{margin-bottom:0;}
-  .ticket-body{overflow:hidden;}
-  .ticket.collapsed .ticket-body{display:none;}
-  .chevron{font-size:11px;color:var(--ink-soft);transition:.15s;}
   .ticket-head .cliente{font-family:'Fraunces',serif;font-weight:600;font-size:17px;color:var(--forest-deep);}
   .ticket-head .meta{font-family:'IBM Plex Mono',monospace;font-size:11.5px;color:var(--ink-soft);margin-top:2px;}
   .tag{font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;
@@ -155,6 +150,12 @@
     color:var(--ink-soft);border-bottom:1.5px solid var(--forest);padding:8px 6px;}
   table.list td{padding:9px 6px;border-bottom:1px solid var(--line);}
   table.list tr:last-child td{border-bottom:none;}
+
+  .perda-bar-row{display:flex;align-items:center;gap:10px;margin-bottom:10px;font-size:13px;}
+  .perda-bar-label{width:170px;flex-shrink:0;color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  .perda-bar-track{flex:1;background:var(--paper);border-radius:5px;height:20px;overflow:hidden;border:1px solid var(--line);}
+  .perda-bar-fill{background:var(--red);height:100%;border-radius:5px 0 0 5px;transition:width .2s;}
+  .perda-bar-valor{width:90px;flex-shrink:0;text-align:right;font-family:'IBM Plex Mono',monospace;font-size:12.5px;color:var(--ink-soft);}
   .muted{color:var(--ink-soft);font-size:12.5px;}
   .empty{padding:28px 16px;text-align:center;color:var(--ink-soft);font-size:14px;}
 
@@ -205,10 +206,18 @@
 
   @media print{
     body *{visibility:hidden;}
-    #printArea, #printArea *{visibility:visible;}
-    #printArea{position:absolute;left:0;top:0;width:100%;padding:0;margin:0;border:none;}
-    @page{ margin:6mm; }
+    #printReciboArea, #printReciboArea *{visibility:visible;}
+    #printReciboArea{position:absolute;left:0;top:0;width:100%;}
   }
+  .recibo-print{
+    display:none;font-family:'IBM Plex Mono',monospace;font-size:13px;line-height:1.6;
+    max-width:340px;margin:0 auto;padding:16px;color:#000;
+  }
+  .recibo-print .rline{border:none;border-top:1px dashed #000;margin:8px 0;}
+  .recibo-print .rcenter{text-align:center;font-weight:700;}
+  .recibo-print .rtitulo{font-weight:700;text-align:center;margin:6px 0;}
+  .recibo-print .ritem{display:flex;justify-content:space-between;gap:8px;}
+  .recibo-print .rtabela-head{display:flex;justify-content:space-between;font-weight:700;}
 </style>
 </head>
 <body>
@@ -249,21 +258,15 @@
     <button data-tab="novo">Novo pedido</button>
     <button data-tab="clientes">Clientes</button>
     <button data-tab="produtos">Produtos</button>
-    <button data-tab="perdas">Perdas</button>
     <button data-tab="relatorio">Relatório</button>
+    <button data-tab="perdas">Perdas</button>
   </nav>
 
   <!-- PEDIDOS -->
   <section class="panel active" id="panel-pedidos">
     <h2 class="sec">Pendentes de entrega</h2>
     <div id="listaPendentes"></div>
-    <h2 class="sec" style="margin-top:26px;display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;">
-      <span>Entregues</span>
-      <span style="display:flex;gap:6px;">
-        <button class="btn btn-ghost btn-small" id="btnExpandirTodos" type="button">Expandir todos</button>
-        <button class="btn btn-ghost btn-small" id="btnRecolherTodos" type="button">Recolher todos</button>
-      </span>
-    </h2>
+    <h2 class="sec" style="margin-top:26px;">Entregues</h2>
     <div id="listaEntregues"></div>
   </section>
 
@@ -344,48 +347,6 @@
     </div>
   </section>
 
-  <!-- PERDAS -->
-  <section class="panel" id="panel-perdas">
-    <h2 class="sec">Perdas / devoluções</h2>
-    <p class="muted" style="margin-top:-8px;">Quantidade e valor perdido, calculados a partir da perda por produto lançada em cada pedido entregue.</p>
-    <div class="card">
-      <div class="row2">
-        <div class="field"><label>De</label><input type="date" id="pdDe"></div>
-        <div class="field"><label>Até</label><input type="date" id="pdAte"></div>
-      </div>
-      <div class="row2">
-        <div class="field"><label>Produto</label><select id="pdProduto"><option value="">Todos os produtos</option></select></div>
-        <div class="field"><label>Mercado</label><select id="pdMercado"><option value="">Todos os mercados</option></select></div>
-      </div>
-      <div class="row2">
-        <div class="field">
-          <label>Gráfico agrupado por</label>
-          <select id="pdAgrupar">
-            <option value="produto">Produto</option>
-            <option value="mercado">Mercado</option>
-          </select>
-        </div>
-        <div class="field">
-          <label>Métrica do gráfico</label>
-          <select id="pdMetrica">
-            <option value="quantidade">Quantidade perdida</option>
-            <option value="valor">Valor perdido (R$)</option>
-          </select>
-        </div>
-      </div>
-      <div style="display:flex;gap:8px;">
-        <button class="btn btn-primary btn-small" id="btnFiltrarPerdas" type="button">Filtrar</button>
-        <button class="btn btn-ghost btn-small" id="btnLimparPerdas" type="button">Limpar filtro</button>
-      </div>
-    </div>
-    <div class="card">
-      <canvas id="graficoPerdas" height="120"></canvas>
-    </div>
-    <div class="card">
-      <table class="list" id="tabelaPerdas"></table>
-    </div>
-  </section>
-
   <!-- RELATÓRIO -->
   <section class="panel" id="panel-relatorio">
     <h2 class="sec">Relatório por mercado</h2>
@@ -406,6 +367,30 @@
     <div id="relatorioPedidosLista"></div>
   </section>
 
+  <!-- PERDAS -->
+  <section class="panel" id="panel-perdas">
+    <h2 class="sec">Perdas por produto e mercado</h2>
+    <p class="muted" style="margin-top:-8px;">Quantidade e valor perdido, com base no que foi registrado em cada pedido entregue.</p>
+    <div class="card">
+      <div class="row2">
+        <div class="field">
+          <label>Produto</label>
+          <select id="perdaFiltroProduto"><option value="">Todos os produtos</option></select>
+        </div>
+        <div class="field">
+          <label>Mercado</label>
+          <select id="perdaFiltroCliente"><option value="">Todos os mercados</option></select>
+        </div>
+      </div>
+    </div>
+    <div class="card">
+      <div id="perdaGrafico"></div>
+    </div>
+    <div class="card">
+      <table class="list" id="tabelaPerdas"></table>
+    </div>
+  </section>
+
 </div>
 
 <!-- MODAL RESUMO -->
@@ -413,18 +398,16 @@
   <div class="modal">
     <button class="modal-close" id="fecharModal">&times;</button>
     <h3>Ficha para emissão da NFP-e</h3>
-    <div class="sub">Use estes dados pra preencher as abas do Portal Receita/PR (Emitente, Destinatário, Identificação da Nota, Local de Retirada/Entrega, Produtos, Transporte, Resumo).</div>
-    <div class="resumo-block" id="printArea">
-      <h4>Prévia de impressão</h4>
-      <pre class="resumo-line" id="printFicha" style="margin:0;"></pre>
-    </div>
-    <div class="resumo-block">
-      <h4>Transporte (você usa veículo próprio na entrega)</h4>
-      <div class="row2">
-        <div class="field" style="margin-bottom:0;"><label>Placa do veículo</label><input type="text" id="transportePlaca" placeholder="ABC1D23"></div>
-        <div class="field" style="margin-bottom:0;"><label>UF do veículo</label><input type="text" id="transporteUf" placeholder="PR" maxlength="2" style="text-transform:uppercase;"></div>
+    <div class="sub">Use estes dados para preencher o app Nota Fiscal Fácil (NFF) ou o Portal Receita/PR. Natureza da operação: <b>Venda</b> · CFOP <b>5101</b>.</div>
+    <div id="printArea">
+      <div class="resumo-block">
+        <h4>Destinatário</h4>
+        <div class="resumo-line" id="resumoDestinatario"></div>
       </div>
-      <p class="muted" style="margin:8px 0 0;">Fica salvo pra próxima vez — só mude se trocar de veículo.</p>
+      <div class="resumo-block">
+        <h4>Itens</h4>
+        <div class="resumo-line" id="resumoItens"></div>
+      </div>
     </div>
     <textarea id="resumoTexto" readonly></textarea>
     <div class="ticket-actions" style="margin-top:14px;">
@@ -440,6 +423,8 @@
   </div>
 </div>
 
+<div id="printReciboArea" class="recibo-print"></div>
+
 <!-- MODAL PREÇOS -->
 <div class="modal-bg" id="modalPrecos">
   <div class="modal">
@@ -453,7 +438,6 @@
 
 <div class="toast" id="toast"></div>
 
-<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-auth-compat.js"></script>
@@ -474,6 +458,15 @@
 // Lista alinhada com a ordem do talão físico da família (Alface Crespa -> Catalônia).
 // Itens com codigo "" ainda não têm o código interno confirmado pela família — o valor
 // e o NCM são estimativas e devem ser conferidos antes da emissão real.
+const EMITENTE = {
+  nome: "FABRICIO INACIO TERASSI",
+  cpf: "035.356.189-40",
+  ie: "9593472202",
+  endereco: "Rua Agenor Terassi, 550",
+  municipio: "Bela Vista do Paraíso/PR",
+  telefone: "(43) 9990-65961",
+};
+
 const DEFAULT_PRODUTOS = [
   {codigo:"0121.1050.02", descricao:"ALFACE CRESPA - HIDROPÔNICO", ncm:"07051900", cfop:"5101", unidade:"UN", valor:4.00},
   {codigo:"0121.1050.10", descricao:"ALFACE AMERICANA - HIDROPÔNICO", ncm:"07051900", cfop:"5101", unidade:"UN", valor:4.50},
@@ -507,8 +500,6 @@ let produtos = [];
 let clientes = [];
 let pedidos = [];
 let precos = {}; // { [clienteId]: { [itemKey]: valorNumero } } — override de preço por cliente
-let transporteConfig = { placa:'', uf:'PR' }; // dados do veículo próprio usado na entrega (Portal Receita/PR)
-let ticketsExpandidos = new Set(); // ids de pedidos ENTREGUES que a usuária abriu manualmente (ficam retraídos por padrão)
 let currentResumoPedidoId = null;
 let currentPrecoClienteId = null;
 let editingProdutoId = null;
@@ -521,7 +512,6 @@ async function loadAll(){
   clientes = await getOrInit('clientes', DEFAULT_CLIENTES);
   pedidos = await getOrInit('pedidos', []);
   precos = await getOrInit('precos', {});
-  transporteConfig = await getOrInit('transporte', { placa:'', uf:'PR' });
   renderClientesSelect();
   renderClientesTable();
   renderProdutosTable();
@@ -827,15 +817,6 @@ function getPreco(clienteId, itemKey){
 function pedidoTotal(pedido){
   return pedido.itens.reduce((s,it)=> s + getPreco(pedido.clienteId, it.codigo) * it.quantidade, 0);
 }
-// Perda/devolução agora é lançada por produto (quantidade), e convertida em R$
-// usando o preço aplicado a esse cliente/produto — não mais um valor único em R$.
-function devolucaoValorTotal(pedido){
-  const dev = pedido.devolucoes || {};
-  return pedido.itens.reduce((s,it)=>{
-    const q = dev[it.codigo] || 0;
-    return s + q * getPreco(pedido.clienteId, it.codigo);
-  }, 0);
-}
 function fmtData(d){
   if(!d) return '';
   const [y,m,day] = d.split('-');
@@ -854,7 +835,6 @@ function renderPedidos(){
 
   attachTicketListeners();
   renderRelatorio();
-  renderPerdas();
 }
 
 function attachTicketListeners(){
@@ -863,25 +843,28 @@ function attachTicketListeners(){
   document.querySelectorAll('[data-action="excluir"]').forEach(b=>b.addEventListener('click', onExcluir));
   document.querySelectorAll('[data-action="reabrir"]').forEach(b=>b.addEventListener('click', onReabrir));
   document.querySelectorAll('[data-action="editar-itens"]').forEach(b=>b.addEventListener('click', ()=>iniciarEdicaoPedido(b.dataset.id)));
-  document.querySelectorAll('.devolucao-input').forEach(inp=>inp.addEventListener('change', onDevolucaoChange));
-  document.querySelectorAll('[data-action="toggle"]').forEach(el=>el.addEventListener('click', onToggleTicket));
+  document.querySelectorAll('.perda-input').forEach(inp=>inp.addEventListener('change', onPerdaChange));
 }
 
-function onToggleTicket(e){
-  const id = e.currentTarget.dataset.id;
-  if(ticketsExpandidos.has(id)) ticketsExpandidos.delete(id);
-  else ticketsExpandidos.add(id);
-  renderPedidos();
+function getPerdas(p){ return p.perdas || {}; }
+function perdaValorTotal(p){
+  const perdas = getPerdas(p);
+  const codigos = Object.keys(perdas);
+  if(codigos.length===0) return p.devolucaoValor || 0; // compatibilidade com pedidos antigos
+  let total = 0;
+  codigos.forEach(codigo=>{ total += (parseFloat(perdas[codigo])||0) * getPreco(p.clienteId, codigo); });
+  return total;
 }
 
-async function onDevolucaoChange(e){
-  const p = pedidos.find(x=>x.id===e.target.dataset.id);
-  if(!p) return;
+async function onPerdaChange(e){
+  const id = e.target.dataset.id;
   const codigo = e.target.dataset.codigo;
+  const p = pedidos.find(x=>x.id===id);
+  if(!p) return;
+  if(!p.perdas) p.perdas = {};
   const qtd = parseFloat(e.target.value) || 0;
-  if(!p.devolucoes) p.devolucoes = {};
-  if(qtd > 0) p.devolucoes[codigo] = qtd;
-  else delete p.devolucoes[codigo];
+  if(qtd>0) p.perdas[codigo] = qtd; else delete p.perdas[codigo];
+  p.devolucaoValor = 0; // migra de vez pra registro por item
   await save('pedidos', pedidos);
   renderPedidos();
   showToast('Perda registrada.');
@@ -889,55 +872,45 @@ async function onDevolucaoChange(e){
 
 function ticketHTML(p){
   const total = pedidoTotal(p);
-  const devolucao = devolucaoValorTotal(p);
-  const liquido = total - devolucao;
+  const perdas = getPerdas(p);
+  const valorPerda = perdaValorTotal(p);
+  const liquido = total - valorPerda;
   const itensHtml = p.itens.map(it=>{
     const info = produtoInfo(it.codigo);
     return `<li><span>${info.descricao}</span><span class="qtd">${it.quantidade} ${info.unidade}</span></li>`;
   }).join('');
-  const devObj = p.devolucoes || {};
-  const itensPerdaHtml = p.itens.map(it=>{
+  const perdaItensHtml = p.itens.map(it=>{
     const info = produtoInfo(it.codigo);
-    const q = devObj[it.codigo] || '';
-    return `<div class="np-row" style="padding:6px 0;">
-      <span class="esp">${info.descricao} <span class="muted">(entregue: ${it.quantidade})</span></span>
-      <input type="number" step="1" min="0" max="${it.quantidade}" class="devolucao-input" data-id="${p.id}" data-codigo="${it.codigo}" value="${q}" placeholder="0">
+    const qtdPerdida = perdas[it.codigo] != null ? perdas[it.codigo] : '';
+    return `<div class="np-row" style="padding:7px 0;">
+      <span class="esp">${info.descricao} <span class="muted">(saiu ${it.quantidade} ${info.unidade})</span></span>
+      <input type="number" step="1" min="0" max="${it.quantidade}" class="perda-input" data-id="${p.id}" data-codigo="${it.codigo}" value="${qtdPerdida}" placeholder="0">
     </div>`;
   }).join('');
   const devolucaoHtml = p.status==='entregue' ? `
-    <label style="margin-top:10px;">Perda / devolução por produto (quantidade)</label>
-    ${itensPerdaHtml}
-    <div class="muted" style="text-align:right;margin-top:2px;">Valor da perda: R$ ${devolucao.toFixed(2)}</div>
+    <div class="muted" style="margin-top:12px;">Perda / devolução — quantidade por item</div>
+    ${perdaItensHtml}
     <div class="ticket-total" style="color:var(--forest-deep);"><span>Líquido a receber</span><span>R$ ${liquido.toFixed(2)}</span></div>
   ` : '';
-
-  const isEntregue = p.status === 'entregue';
-  const collapsed = isEntregue && !ticketsExpandidos.has(p.id);
-
   return `
-  <div class="ticket ${p.status}${collapsed ? ' collapsed' : ''}">
-    ${isEntregue ? '<div class="stamp">Entregue</div>' : ''}
-    <div class="ticket-head${isEntregue ? ' toggleable' : ''}" ${isEntregue ? `data-action="toggle" data-id="${p.id}"` : ''}>
+  <div class="ticket ${p.status}">
+    ${p.status==='entregue' ? '<div class="stamp">Entregue</div>' : ''}
+    <div class="ticket-head">
       <div>
-        <div class="cliente">${clienteNome(p.clienteId)}${collapsed ? ` <span class="muted" style="font-weight:400;font-size:12.5px;">· líquido R$ ${liquido.toFixed(2)}</span>` : ''}</div>
+        <div class="cliente">${clienteNome(p.clienteId)}</div>
         <div class="meta">Pedido de ${fmtData(p.data)}${p.dataEntrega ? ' · entregue em '+fmtData(p.dataEntrega) : ''}</div>
       </div>
-      <div style="display:flex;align-items:center;gap:8px;">
-        <span class="tag ${p.status}">${p.status}</span>
-        ${isEntregue ? `<span class="chevron">${collapsed ? '▸' : '▾'}</span>` : ''}
-      </div>
+      <span class="tag ${p.status}">${p.status}</span>
     </div>
-    <div class="ticket-body">
-      <ul class="itens">${itensHtml}</ul>
-      <div class="ticket-total"><span>Total bruto</span><span>R$ ${total.toFixed(2)}</span></div>
-      ${devolucaoHtml}
-      ${p.notaNumero ? `<div class="muted" style="margin-top:6px;">Nota nº ${p.notaNumero}${p.notaChave ? ' · chave ...'+p.notaChave.slice(-6) : ''}</div>` : ''}
-      <div class="ticket-actions">
-        ${p.status==='pendente' ? `<button class="btn btn-primary btn-small" data-action="entregar" data-id="${p.id}">Marcar como entregue</button>` : `<button class="btn btn-ghost btn-small" data-action="resumo" data-id="${p.id}">Ver ficha da nota</button>`}
-        ${p.status==='pendente' ? `<button class="btn btn-ghost btn-small" data-action="editar-itens" data-id="${p.id}">Editar itens</button>` : ''}
-        ${p.status==='entregue' ? `<button class="btn btn-ghost btn-small" data-action="reabrir" data-id="${p.id}">Reabrir pedido</button>` : ''}
-        <button class="btn btn-danger btn-small" data-action="excluir" data-id="${p.id}">Excluir</button>
-      </div>
+    <ul class="itens">${itensHtml}</ul>
+    <div class="ticket-total"><span>Total bruto</span><span>R$ ${total.toFixed(2)}</span></div>
+    ${devolucaoHtml}
+    ${p.notaNumero ? `<div class="muted" style="margin-top:6px;">Nota nº ${p.notaNumero}${p.notaChave ? ' · chave ...'+p.notaChave.slice(-6) : ''}</div>` : ''}
+    <div class="ticket-actions">
+      ${p.status==='pendente' ? `<button class="btn btn-primary btn-small" data-action="entregar" data-id="${p.id}">Marcar como entregue</button>` : `<button class="btn btn-ghost btn-small" data-action="resumo" data-id="${p.id}">Ver ficha da nota</button>`}
+      ${p.status==='pendente' ? `<button class="btn btn-ghost btn-small" data-action="editar-itens" data-id="${p.id}">Editar itens</button>` : ''}
+      ${p.status==='entregue' ? `<button class="btn btn-ghost btn-small" data-action="reabrir" data-id="${p.id}">Reabrir pedido</button>` : ''}
+      <button class="btn btn-danger btn-small" data-action="excluir" data-id="${p.id}">Excluir</button>
     </div>
   </div>`;
 }
@@ -969,7 +942,8 @@ async function onReabrir(e){
     : 'Reabrir este pedido para editar os itens?')) return;
   p.status = 'pendente';
   p.dataEntrega = '';
-  p.devolucoes = {};
+  p.devolucaoValor = 0;
+  p.perdas = {};
   p.notaNumero = '';
   p.notaChave = '';
   await save('pedidos', pedidos);
@@ -977,92 +951,90 @@ async function onReabrir(e){
   showToast('Pedido reaberto. Você já pode editar os itens.');
 }
 
-const EMITENTE_TXT = `FABRICIO INACIO TERASSI
-CPF: 035.356.189-40 | IE: 9593472202
-Bela Vista do Paraíso/PR`;
+function openResumo(id){
+  currentResumoPedidoId = id;
+  const p = pedidos.find(x=>x.id===id);
+  const c = clientes.find(x=>x.id===p.clienteId);
+  const total = pedidoTotal(p);
 
-function gerarTextoFicha(p, c, linhas, total){
-  const placa = (document.getElementById('transportePlaca').value || '').trim();
-  const uf = (document.getElementById('transporteUf').value || 'PR').trim().toUpperCase();
-  return `FICHA PARA EMISSÃO — NFP-e (Portal Receita/PR)
-
-== EMITENTE ==
-${EMITENTE_TXT}
-
-== DESTINATÁRIO ==
-${c.nome}
-CNPJ: ${c.cnpj} | IE: ${c.ie}
+  document.getElementById('resumoDestinatario').textContent =
+`${c.nome}
+CNPJ: ${c.cnpj}    IE: ${c.ie}
 ${c.endereco} — ${c.bairro}
-${c.municipio} | CEP: ${c.cep}
+${c.municipio}    CEP: ${c.cep}`;
 
-== IDENTIFICAÇÃO DA NOTA ==
-Natureza da operação: Venda de produção do estabelecimento
-Tipo de operação: Saída | Finalidade da emissão: NF-e normal
-CFOP: 5101 (venda dentro do PR — confira se muda pra 6101 em venda interestadual)
-Data do pedido: ${fmtData(p.data)} | Data/hora de saída: ${fmtData(p.dataEntrega)}
-Indicador de presença do comprador: Não presencial, outros (pedido combinado antes por telefone/WhatsApp, entrega feita depois)
-Consumidor final: Não (venda para contribuinte do ICMS)
-
-== LOCAL DE RETIRADA/ENTREGA ==
-Retirada: padrão do sistema — mesma propriedade do emitente (não precisa preencher no site)
-Entrega: padrão do sistema — mesmo endereço do destinatário acima (não precisa preencher no site)
-
-== PRODUTOS ==
-${linhas}
-
-== TRANSPORTE ==
-Modalidade do frete: Transporte próprio por conta do remetente/emitente (veículo próprio)
-Placa do veículo: ${placa || '(preencher)'} | UF: ${uf || 'PR'}
-
-== RESUMO ==
-TOTAL DA NOTA: R$ ${total.toFixed(2)}`;
-}
-
-function montarLinhasItens(p){
-  return p.itens.map(it=>{
+  const linhas = p.itens.map(it=>{
     const info = produtoInfo(it.codigo);
     const valorAplicado = getPreco(p.clienteId, it.codigo);
     const vtotal = valorAplicado * it.quantidade;
     const cabecalho = info.codigo ? `${info.codigo}  ${info.descricao}` : `${info.descricao}  (código a definir)`;
     return `${cabecalho}\n  NCM ${info.ncm||'—'}  CFOP ${info.cfop}  ${it.quantidade} ${info.unidade} x R$ ${valorAplicado.toFixed(2)} = R$ ${vtotal.toFixed(2)}`;
   }).join('\n\n');
-}
+  document.getElementById('resumoItens').textContent = linhas + `\n\nTOTAL DA NOTA: R$ ${total.toFixed(2)}`;
 
-function atualizarFicha(p, c){
-  const total = pedidoTotal(p);
-  const linhas = montarLinhasItens(p);
-  const texto = gerarTextoFicha(p, c, linhas, total);
-  document.getElementById('resumoTexto').value = texto;
-  document.getElementById('printFicha').textContent = texto;
-}
+  const textoCompleto =
+`FICHA PARA EMISSÃO — NFP-e
+Natureza da operação: Venda | CFOP 5101
+Data do pedido: ${fmtData(p.data)} | Entrega: ${fmtData(p.dataEntrega)}
 
-function openResumo(id){
-  currentResumoPedidoId = id;
-  const p = pedidos.find(x=>x.id===id);
-  const c = clientes.find(x=>x.id===p.clienteId);
+DESTINATÁRIO
+${c.nome}
+CNPJ: ${c.cnpj} | IE: ${c.ie}
+${c.endereco} — ${c.bairro}
+${c.municipio} | CEP: ${c.cep}
 
-  document.getElementById('transportePlaca').value = transporteConfig.placa || '';
-  document.getElementById('transporteUf').value = transporteConfig.uf || 'PR';
+LOCAL DE RETIRADA
+${EMITENTE.nome}
+${EMITENTE.endereco}
+${EMITENTE.municipio}
 
-  atualizarFicha(p, c);
+TRANSPORTE
+Frete por conta do remetente (produtor) — entrega feita pelo próprio produtor, sem transportadora.
+
+ITENS
+${linhas}
+
+TOTAL DA NOTA: R$ ${total.toFixed(2)}`;
+  document.getElementById('resumoTexto').value = textoCompleto;
   document.getElementById('notaNumero').value = p.notaNumero || '';
   document.getElementById('notaChave').value = p.notaChave || '';
+
+  const linhasRecibo = p.itens.map(it=>{
+    const info = produtoInfo(it.codigo);
+    const valorAplicado = getPreco(p.clienteId, it.codigo);
+    const vtotal = valorAplicado * it.quantidade;
+    return `<div class="ritem"><span>${info.codigo||'—'} ${info.descricao}</span></div>
+      <div class="ritem"><span>${it.quantidade}</span><span>R$ ${vtotal.toFixed(2)}</span></div>`;
+  }).join('');
+  document.getElementById('printReciboArea').innerHTML = `
+    <div class="rcenter">${EMITENTE.nome}</div>
+    <div>${EMITENTE.nome}</div>
+    <div>${EMITENTE.endereco}</div>
+    <div>${EMITENTE.municipio}</div>
+    <div>${EMITENTE.telefone}</div>
+    <hr class="rline">
+    <div class="rtitulo">Comprovante Não Fiscal</div>
+    <hr class="rline">
+    <div>Cliente: ${c.nome}</div>
+    <div>CPF: </div>
+    <div>RG: </div>
+    <div>Atendente: </div>
+    <div>Fone: </div>
+    <div>Cel: </div>
+    <div>Endereço: ${c.bairro||''} - ${c.municipio||''}</div>
+    <hr class="rline">
+    <div>Data entrega: ${fmtData(p.dataEntrega) || '—'}</div>
+    <div>Data venda: ${fmtData(p.data)}</div>
+    <hr class="rline">
+    <div class="rtabela-head"><span>Cod. Produto</span><span>Qtd / Vlr Total</span></div>
+    ${linhasRecibo}
+    <hr class="rline">
+    <div class="ritem" style="font-weight:700;"><span>Valor total</span><span>R$ ${total.toFixed(2)}</span></div>
+    <div style="margin-top:34px;">Ass: _____________________________</div>
+  `;
+
   document.getElementById('modalResumo').classList.add('open');
 }
-
-async function onTransporteChange(){
-  const p = pedidos.find(x=>x.id===currentResumoPedidoId);
-  if(!p) return;
-  const c = clientes.find(x=>x.id===p.clienteId);
-  atualizarFicha(p, c);
-  transporteConfig = {
-    placa: document.getElementById('transportePlaca').value.trim(),
-    uf: document.getElementById('transporteUf').value.trim().toUpperCase()
-  };
-  await save('transporte', transporteConfig);
-}
-document.getElementById('transportePlaca').addEventListener('change', onTransporteChange);
-document.getElementById('transporteUf').addEventListener('change', onTransporteChange);
 
 document.getElementById('fecharModal').addEventListener('click', ()=> document.getElementById('modalResumo').classList.remove('open'));
 document.getElementById('modalResumo').addEventListener('click', (e)=>{ if(e.target.id==='modalResumo') e.currentTarget.classList.remove('open'); });
@@ -1077,13 +1049,7 @@ document.getElementById('btnCopiar').addEventListener('click', async ()=>{
     showToast('Selecione e copie manualmente (Ctrl+C).');
   }
 });
-let imprimindo = false;
-document.getElementById('btnImprimir').addEventListener('click', ()=>{
-  if(imprimindo) return;
-  imprimindo = true;
-  window.print();
-  setTimeout(()=>{ imprimindo = false; }, 1500);
-});
+document.getElementById('btnImprimir').addEventListener('click', ()=> window.print());
 
 document.getElementById('btnSalvarNota').addEventListener('click', async ()=>{
   const p = pedidos.find(x=>x.id===currentResumoPedidoId);
@@ -1135,7 +1101,7 @@ function renderRelatorio(){
   const porCliente = {};
   entregues.forEach(p=>{
     const total = pedidoTotal(p);
-    const dev = devolucaoValorTotal(p);
+    const dev = perdaValorTotal(p);
     if(!porCliente[p.clienteId]) porCliente[p.clienteId] = {pedidos:0, bruto:0, devolucao:0};
     porCliente[p.clienteId].pedidos++;
     porCliente[p.clienteId].bruto += total;
@@ -1176,131 +1142,6 @@ function renderRelatorio(){
     }
   }
 }
-// PERDAS — filtro por produto e mercado, com gráfico e tabela
-let chartPerdas = null;
-
-function populatePerdasFiltros(){
-  const selProd = document.getElementById('pdProduto');
-  const curProd = selProd.value;
-  selProd.innerHTML = '<option value="">Todos os produtos</option>' +
-    produtos.map(p=>`<option value="${p.codigo}">${p.descricao}</option>`).join('');
-  if(curProd) selProd.value = curProd;
-
-  const selMerc = document.getElementById('pdMercado');
-  const curMerc = selMerc.value;
-  selMerc.innerHTML = '<option value="">Todos os mercados</option>' +
-    clientes.map(c=>`<option value="${c.id}">${c.apelido || c.nome}</option>`).join('');
-  if(curMerc) selMerc.value = curMerc;
-}
-
-function coletarPerdas(){
-  const de = document.getElementById('pdDe').value;
-  const ate = document.getElementById('pdAte').value;
-  const filtroProduto = document.getElementById('pdProduto').value;
-  const filtroMercado = document.getElementById('pdMercado').value;
-
-  const registros = [];
-  pedidos
-    .filter(p=> p.status==='entregue' && (!de || p.dataEntrega>=de) && (!ate || p.dataEntrega<=ate))
-    .forEach(p=>{
-      const dev = p.devolucoes || {};
-      p.itens.forEach(it=>{
-        const qtd = dev[it.codigo] || 0;
-        if(qtd<=0) return;
-        if(filtroProduto && it.codigo!==filtroProduto) return;
-        if(filtroMercado && p.clienteId!==filtroMercado) return;
-        const info = produtoInfo(it.codigo);
-        registros.push({
-          data: p.dataEntrega,
-          clienteId: p.clienteId,
-          clienteNome: clienteNome(p.clienteId),
-          produtoDescricao: info.descricao,
-          quantidade: qtd,
-          valor: qtd * getPreco(p.clienteId, it.codigo)
-        });
-      });
-    });
-  return registros;
-}
-
-function renderPerdas(){
-  if(!document.getElementById('panel-perdas')) return;
-  populatePerdasFiltros();
-  const registros = coletarPerdas();
-  const agrupar = document.getElementById('pdAgrupar').value;
-  const metrica = document.getElementById('pdMetrica').value;
-
-  const grupos = {};
-  registros.forEach(r=>{
-    const chave = agrupar==='produto' ? r.produtoDescricao : r.clienteNome;
-    if(!grupos[chave]) grupos[chave] = {quantidade:0, valor:0};
-    grupos[chave].quantidade += r.quantidade;
-    grupos[chave].valor += r.valor;
-  });
-  const labels = Object.keys(grupos).sort((a,b)=> grupos[b][metrica]-grupos[a][metrica]);
-  const dados = labels.map(l=> grupos[l][metrica]);
-
-  const canvas = document.getElementById('graficoPerdas');
-  if(canvas && window.Chart){
-    const ctx = canvas.getContext('2d');
-    if(chartPerdas) chartPerdas.destroy();
-    chartPerdas = new Chart(ctx, {
-      type: 'bar',
-      data: {
-        labels,
-        datasets: [{
-          label: metrica==='quantidade' ? 'Quantidade perdida' : 'Valor perdido (R$)',
-          data: dados,
-          backgroundColor: '#5E8F52',
-          borderRadius: 5,
-        }]
-      },
-      options: {
-        responsive: true,
-        plugins:{ legend:{ display:false } },
-        scales:{ y:{ beginAtZero:true } }
-      }
-    });
-  }
-
-  const tabela = document.getElementById('tabelaPerdas');
-  if(!tabela) return;
-  if(registros.length===0){
-    tabela.innerHTML = '<tr><td class="empty">Nenhuma perda registrada no período/filtro selecionado.</td></tr>';
-    return;
-  }
-  const ordenados = [...registros].sort((a,b)=> b.data.localeCompare(a.data));
-  let totQtd=0, totValor=0;
-  const linhas = ordenados.map(r=>{
-    totQtd += r.quantidade; totValor += r.valor;
-    return `<tr><td>${fmtData(r.data)}</td><td>${r.clienteNome}</td><td>${r.produtoDescricao}</td><td>${r.quantidade}</td><td>R$ ${r.valor.toFixed(2)}</td></tr>`;
-  }).join('');
-  tabela.innerHTML = `<tr><th>Data</th><th>Mercado</th><th>Produto</th><th>Qtd. perdida</th><th>Valor perdido</th></tr>` +
-    linhas +
-    `<tr style="border-top:2px solid var(--forest);"><td colspan="3"><b>Total</b></td><td><b>${totQtd}</b></td><td><b>R$ ${totValor.toFixed(2)}</b></td></tr>`;
-}
-document.getElementById('btnFiltrarPerdas').addEventListener('click', renderPerdas);
-document.getElementById('btnLimparPerdas').addEventListener('click', ()=>{
-  document.getElementById('pdDe').value = '';
-  document.getElementById('pdAte').value = '';
-  document.getElementById('pdProduto').value = '';
-  document.getElementById('pdMercado').value = '';
-  document.getElementById('pdAgrupar').value = 'produto';
-  document.getElementById('pdMetrica').value = 'quantidade';
-  renderPerdas();
-});
-document.getElementById('pdAgrupar').addEventListener('change', renderPerdas);
-document.getElementById('pdMetrica').addEventListener('change', renderPerdas);
-
-document.getElementById('btnExpandirTodos').addEventListener('click', ()=>{
-  pedidos.filter(p=>p.status==='entregue').forEach(p=> ticketsExpandidos.add(p.id));
-  renderPedidos();
-});
-document.getElementById('btnRecolherTodos').addEventListener('click', ()=>{
-  ticketsExpandidos.clear();
-  renderPedidos();
-});
-
 document.getElementById('btnFiltrarRel').addEventListener('click', renderRelatorio);
 document.getElementById('btnLimparRel').addEventListener('click', ()=>{
   document.getElementById('relDe').value=''; document.getElementById('relAte').value='';

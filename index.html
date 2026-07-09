@@ -214,14 +214,14 @@
   .login-card #btnLogin{padding:14px 18px;font-size:16px;}
   .login-erro{color:var(--red);font-size:13.5px;margin:-8px 0 14px;min-height:18px;}
 
+  #printOutput{display:none;}
   @media print{
-    body *{visibility:hidden;}
-    #printArea, #printArea *{visibility:visible;}
-    #printArea{position:absolute;left:0;top:0;width:100%;padding:0;margin:0;border:none;}
-    body.print-comprovante #printArea, body.print-comprovante #printArea *{visibility:hidden;}
-    body.print-comprovante #printAreaComprovante, body.print-comprovante #printAreaComprovante *{visibility:visible;}
-    body.print-comprovante #printAreaComprovante{position:absolute;left:0;top:0;width:100%;padding:0;margin:0;border:none;}
-    @page{ margin:6mm; }
+    body > *:not(#printOutput){display:none !important;}
+    #printOutput{display:block !important;width:100%;margin:0;padding:0;}
+    @page{ size:80mm auto; margin:3mm; }
+    body{width:80mm;}
+    .comprovante{font-size:11.5px;}
+    .resumo-line{font-size:10.5px;}
   }
 </style>
 </head>
@@ -1151,16 +1151,17 @@ let imprimindo = false;
 document.getElementById('btnImprimir').addEventListener('click', ()=>{
   if(imprimindo) return;
   imprimindo = true;
-  document.body.classList.remove('print-comprovante');
+  document.getElementById('printOutput').innerHTML =
+    '<pre class="resumo-line" style="margin:0;">' + document.getElementById('printFicha').textContent + '</pre>';
   window.print();
-  setTimeout(()=>{ imprimindo = false; }, 1500);
+  setTimeout(()=>{ imprimindo = false; }, 500);
 });
 document.getElementById('btnImprimirComprovante').addEventListener('click', ()=>{
   if(imprimindo) return;
   imprimindo = true;
-  document.body.classList.add('print-comprovante');
+  document.getElementById('printOutput').innerHTML = document.getElementById('printComprovante').innerHTML;
   window.print();
-  setTimeout(()=>{ document.body.classList.remove('print-comprovante'); imprimindo = false; }, 1500);
+  setTimeout(()=>{ imprimindo = false; }, 500);
 });
 
 document.getElementById('btnSalvarNota').addEventListener('click', async ()=>{
@@ -1421,5 +1422,7 @@ document.getElementById('loginEmail').addEventListener('keydown', (e)=>{ if(e.ke
 document.getElementById('btnLogout').addEventListener('click', ()=> auth.signOut());
 
 </script>
+<div id="printOutput"></div>
+
 </body>
 </html>

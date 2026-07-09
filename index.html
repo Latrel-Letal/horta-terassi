@@ -215,12 +215,39 @@
   .login-erro{color:var(--red);font-size:13.5px;margin:-8px 0 14px;min-height:18px;}
 
   #printOutput{display:none;}
+
   @media print{
     body > *:not(#printOutput){display:none !important;}
-    #printOutput{display:block !important;width:100%;margin:0;padding:0;}
-    @page{ size:80mm auto; margin:3mm; }
-    body{width:80mm;}
-    .comprovante{font-size:11.5px;}
+
+    #printOutput{
+      display:block !important;
+      width: 100%;
+      margin: 0;
+      /* Adiciona 4 milímetros de margem interna nas laterais para não cortar o texto */
+      padding: 0 4mm;
+      box-sizing: border-box;
+    }
+
+    @page{
+      size: 80mm auto;
+      margin: 0; /* Zeramos a margem da página para o padding acima fazer o trabalho */
+    }
+
+    body{
+      /* Trocamos de 80mm fixos para 100% para não vazar o tamanho da bobina */
+      width: 100%;
+      margin: 0;
+    }
+
+    .comprovante{
+      font-size: 11px; /* Diminuímos meio ponto pra ajudar a caber as colunas de preço */
+      word-break: break-word; /* Evita que palavras longas empurrem a tabela pra fora */
+    }
+
+    .comprovante-tabela th, .comprovante-tabela td {
+      padding: 4px 1px; /* Reduz um pouquinho o espaçamento interno da tabela */
+    }
+
     .resumo-line{font-size:10.5px;}
   }
 </style>
@@ -267,7 +294,6 @@
     <button data-tab="relatorio">Relatório</button>
   </nav>
 
-  <!-- PEDIDOS -->
   <section class="panel active" id="panel-pedidos">
     <h2 class="sec">Pendentes de entrega</h2>
     <div id="listaPendentes"></div>
@@ -281,7 +307,6 @@
     <div id="listaEntregues"></div>
   </section>
 
-  <!-- NOVO PEDIDO -->
   <section class="panel" id="panel-novo">
     <h2 class="sec">Lançar pedido</h2>
     <div class="card">
@@ -306,7 +331,6 @@
     </div>
   </section>
 
-  <!-- CLIENTES -->
   <section class="panel" id="panel-clientes">
     <h2 class="sec">Clientes cadastrados</h2>
     <div class="card">
@@ -332,7 +356,6 @@
     </div>
   </section>
 
-  <!-- PRODUTOS -->
   <section class="panel" id="panel-produtos">
     <h2 class="sec">Produtos cadastrados</h2>
     <p class="muted" style="margin-top:-6px;">O preço aqui é o padrão, usado quando o cliente não tiver um preço específico definido (veja a aba Clientes → Preços).</p>
@@ -358,7 +381,6 @@
     </div>
   </section>
 
-  <!-- PERDAS -->
   <section class="panel" id="panel-perdas">
     <h2 class="sec">Perdas / devoluções</h2>
     <p class="muted" style="margin-top:-8px;">Quantidade e valor perdido, calculados a partir da perda por produto lançada em cada pedido entregue.</p>
@@ -400,7 +422,6 @@
     </div>
   </section>
 
-  <!-- RELATÓRIO -->
   <section class="panel" id="panel-relatorio">
     <h2 class="sec">Relatório por mercado</h2>
     <p class="muted" style="margin-top:-8px;">Considera só os pedidos já marcados como entregues, descontando as devoluções lançadas em cada um.</p>
@@ -422,7 +443,6 @@
 
 </div>
 
-<!-- MODAL RESUMO -->
 <div class="modal-bg" id="modalResumo">
   <div class="modal">
     <button class="modal-close" id="fecharModal">&times;</button>
@@ -463,7 +483,6 @@
   </div>
 </div>
 
-<!-- MODAL PREÇOS -->
 <div class="modal-bg" id="modalPrecos">
   <div class="modal">
     <button class="modal-close" id="fecharModalPrecos">&times;</button>

@@ -403,6 +403,7 @@
           <label>Lembrete de retirada do relatório</label>
           <select id="clPeriodicidade">
             <option value="">Sem lembrete</option>
+            <option value="7">A cada 7 dias</option>
             <option value="15">A cada 15 dias</option>
             <option value="30">A cada 30 dias</option>
           </select>
@@ -761,6 +762,7 @@ function renderClientesTable(){
       <td>
         <select data-action="periodicidade" data-id="${c.id}" style="width:auto;padding:6px 8px;font-size:12.5px;">
           <option value="" ${!c.periodicidadeRelatorio ? 'selected' : ''}>Sem lembrete</option>
+          <option value="7" ${c.periodicidadeRelatorio==7 ? 'selected' : ''}>7 dias</option>
           <option value="15" ${c.periodicidadeRelatorio==15 ? 'selected' : ''}>15 dias</option>
           <option value="30" ${c.periodicidadeRelatorio==30 ? 'selected' : ''}>30 dias</option>
         </select>

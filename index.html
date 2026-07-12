@@ -216,6 +216,28 @@
 
   #printOutput{display:none;}
 
+  #bannerLembretes{
+    background:#FBF0DA;border:1.5px solid var(--gold);border-radius:10px;
+    padding:12px 14px;margin-bottom:18px;
+  }
+  #bannerLembretes .lembretes-titulo{
+    font-weight:700;font-size:13.5px;color:#8A611C;margin-bottom:8px;
+    display:flex;align-items:center;gap:6px;
+  }
+  #bannerLembretes ul{list-style:none;margin:0;padding:0;}
+  #bannerLembretes li{
+    display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;
+    padding:6px 0;border-top:1px dashed rgba(138,97,28,.3);font-size:13.5px;color:#5c4212;
+  }
+  #bannerLembretes li:first-of-type{border-top:none;}
+  #bannerLembretes .lembrete-atraso{font-family:'IBM Plex Mono',monospace;font-size:11.5px;color:#8A611C;}
+  #bannerLembretes button{
+    font-family:'IBM Plex Sans',sans-serif;font-weight:600;font-size:11.5px;
+    padding:5px 10px;border-radius:6px;border:1.5px solid var(--gold);background:#fff;
+    color:#8A611C;cursor:pointer;
+  }
+  #bannerLembretes button:hover{background:#8A611C;color:#fff;}
+
   @media print{
     body > *:not(#printOutput){display:none !important;}
 
@@ -285,6 +307,8 @@
     <button class="btn btn-ghost btn-small" id="btnLogout" type="button">Sair</button>
   </header>
 
+  <div id="bannerLembretes" style="display:none;"></div>
+
   <nav class="tabs">
     <button data-tab="pedidos" class="active">Pedidos</button>
     <button data-tab="novo">Novo pedido</button>
@@ -292,6 +316,7 @@
     <button data-tab="produtos">Produtos</button>
     <button data-tab="perdas">Perdas</button>
     <button data-tab="relatorio">Relatório</button>
+    <button data-tab="relprodutos">Rel. Produtos</button>
   </nav>
 
   <section class="panel active" id="panel-pedidos">
@@ -372,6 +397,17 @@
       <div class="row2">
         <div class="field"><label>CEP</label><input type="text" id="clCep"></div>
         <div class="field"><label>Inscrição estadual</label><input type="text" id="clIe"></div>
+      </div>
+      <div class="row2">
+        <div class="field">
+          <label>Lembrete de retirada do relatório</label>
+          <select id="clPeriodicidade">
+            <option value="">Sem lembrete</option>
+            <option value="15">A cada 15 dias</option>
+            <option value="30">A cada 30 dias</option>
+          </select>
+        </div>
+        <div class="field"><label>Última retirada</label><input type="date" id="clUltimaRetirada"></div>
       </div>
       <button class="btn btn-primary" id="btnSalvarCliente" type="button">Salvar cliente</button>
     </div>
@@ -460,6 +496,26 @@
       <table class="list" id="tabelaRelatorio"></table>
     </div>
     <div id="relatorioPedidosLista"></div>
+  </section>
+
+  <section class="panel" id="panel-relprodutos">
+    <h2 class="sec">Relatório de vendas por produto</h2>
+    <p class="muted" style="margin-top:-8px;">Agrupa por cliente e, dentro de cada cliente, por produto — considerando só pedidos já entregues no período. Segue o mesmo formato do relatório impresso (Qtd, Unit., Vlr.Ven., Desc, Líquido).</p>
+    <div class="card">
+      <div class="row2">
+        <div class="field"><label>De</label><input type="date" id="rpDe"></div>
+        <div class="field"><label>Até</label><input type="date" id="rpAte"></div>
+      </div>
+      <div class="field"><label>Cliente</label><select id="rpCliente"></select></div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;">
+        <button class="btn btn-primary btn-small" id="btnGerarRelProdutos" type="button">Gerar relatório</button>
+        <button class="btn btn-ghost btn-small" id="btnImprimirRelProdutos" type="button">Imprimir</button>
+        <button class="btn btn-ghost btn-small" id="btnLimparRelProdutos" type="button">Limpar filtro</button>
+      </div>
+    </div>
+    <div class="card" id="previewRelProdutosCard" style="display:none;">
+      <div id="previewRelProdutos"></div>
+    </div>
   </section>
 
 </div>
@@ -590,6 +646,7 @@ async function loadAll(){
   renderProdutosTable();
   renderPedidos();
   renderNpGrid();
+  atualizarBannerLembretes();
   document.getElementById('npData').valueAsDate = new Date();
 }
 
@@ -634,6 +691,59 @@ document.querySelectorAll('nav.tabs button').forEach(btn=>{
   });
 });
 
+// LEMBRETES DE RETIRADA DE RELATÓRIO
+function calcularLembretes(){
+  const hoje = new Date().toISOString().slice(0,10);
+  return clientes
+    .filter(c=>c.periodicidadeRelatorio)
+    .map(c=>{
+      let proxima;
+      if(c.ultimaRetiradaRelatorio){
+        const d = new Date(c.ultimaRetiradaRelatorio+'T00:00:00');
+        d.setDate(d.getDate() + c.periodicidadeRelatorio);
+        proxima = d.toISOString().slice(0,10);
+      } else {
+        proxima = hoje; // nunca teve retirada registrada -> já entra como vencido
+      }
+      const atrasoDias = Math.round((new Date(hoje+'T00:00:00') - new Date(proxima+'T00:00:00')) / 86400000);
+      return { cliente: c, proxima, atrasoDias };
+    })
+    .filter(x=> x.proxima <= hoje)
+    .sort((a,b)=> b.atrasoDias - a.atrasoDias);
+}
+
+function atualizarBannerLembretes(){
+  const banner = document.getElementById('bannerLembretes');
+  if(!banner) return;
+  const lembretes = calcularLembretes();
+  if(lembretes.length===0){ banner.style.display='none'; banner.innerHTML=''; return; }
+  banner.style.display='block';
+  banner.innerHTML = `
+    <div class="lembretes-titulo">⏰ Relatório pra retirar (${lembretes.length})</div>
+    <ul>
+      ${lembretes.map(l=>`
+        <li>
+          <span>${l.cliente.apelido || l.cliente.nome}
+            ${l.cliente.ultimaRetiradaRelatorio
+              ? `<span class="lembrete-atraso"> · vencido há ${l.atrasoDias} dia(s)</span>`
+              : `<span class="lembrete-atraso"> · nunca retirado</span>`}
+          </span>
+          <button data-action="banner-retirado" data-id="${l.cliente.id}" type="button">Marcar retirado hoje</button>
+        </li>
+      `).join('')}
+    </ul>
+  `;
+  banner.querySelectorAll('[data-action="banner-retirado"]').forEach(b=>b.addEventListener('click', async ()=>{
+    const c = clientes.find(x=>x.id===b.dataset.id);
+    if(!c) return;
+    c.ultimaRetiradaRelatorio = new Date().toISOString().slice(0,10);
+    await save('clientes', clientes);
+    renderClientesTable();
+    atualizarBannerLembretes();
+    showToast('Retirada de hoje registrada pra ' + (c.apelido || c.nome) + '.');
+  }));
+}
+
 // CLIENTES
 function renderClientesSelect(){
   const sel = document.getElementById('npCliente');
@@ -642,14 +752,54 @@ function renderClientesSelect(){
 function renderClientesTable(){
   const t = document.getElementById('tabelaClientes');
   if(clientes.length===0){ t.innerHTML = '<tr><td class="empty">Nenhum cliente cadastrado ainda.</td></tr>'; return; }
-  t.innerHTML = `<tr><th>Apelido</th><th>Razão social</th><th>CNPJ</th><th>Local</th><th></th></tr>` +
-    clientes.map(c=>`<tr><td>${c.apelido||'—'}</td><td>${c.nome}</td><td>${c.cnpj}</td><td>${c.bairro}, ${c.municipio}</td><td><button class="btn btn-ghost btn-small" data-action="precos" data-id="${c.id}">Preços</button></td></tr>`).join('');
+  t.innerHTML = `<tr><th>Apelido</th><th>Razão social</th><th>CNPJ</th><th>Local</th><th>Lembrete</th><th>Última retirada</th><th></th><th></th></tr>` +
+    clientes.map(c=>`<tr>
+      <td>${c.apelido||'—'}</td>
+      <td>${c.nome}</td>
+      <td>${c.cnpj}</td>
+      <td>${c.bairro}, ${c.municipio}</td>
+      <td>
+        <select data-action="periodicidade" data-id="${c.id}" style="width:auto;padding:6px 8px;font-size:12.5px;">
+          <option value="" ${!c.periodicidadeRelatorio ? 'selected' : ''}>Sem lembrete</option>
+          <option value="15" ${c.periodicidadeRelatorio==15 ? 'selected' : ''}>15 dias</option>
+          <option value="30" ${c.periodicidadeRelatorio==30 ? 'selected' : ''}>30 dias</option>
+        </select>
+      </td>
+      <td><input type="date" data-action="ultima-retirada" data-id="${c.id}" value="${c.ultimaRetiradaRelatorio || ''}" style="width:auto;padding:6px 8px;font-size:12.5px;"></td>
+      <td>${c.periodicidadeRelatorio ? `<button class="btn btn-ghost btn-small" data-action="retirado-hoje" data-id="${c.id}">Retirado hoje</button>` : ''}</td>
+      <td><button class="btn btn-ghost btn-small" data-action="precos" data-id="${c.id}">Preços</button></td>
+    </tr>`).join('');
   t.querySelectorAll('[data-action="precos"]').forEach(b=>b.addEventListener('click', ()=>openPrecos(b.dataset.id)));
+  t.querySelectorAll('[data-action="periodicidade"]').forEach(sel=>sel.addEventListener('change', async ()=>{
+    const c = clientes.find(x=>x.id===sel.dataset.id);
+    if(!c) return;
+    c.periodicidadeRelatorio = sel.value ? Number(sel.value) : null;
+    await save('clientes', clientes);
+    renderClientesTable();
+    atualizarBannerLembretes();
+  }));
+  t.querySelectorAll('[data-action="ultima-retirada"]').forEach(inp=>inp.addEventListener('change', async ()=>{
+    const c = clientes.find(x=>x.id===inp.dataset.id);
+    if(!c) return;
+    c.ultimaRetiradaRelatorio = inp.value || '';
+    await save('clientes', clientes);
+    atualizarBannerLembretes();
+  }));
+  t.querySelectorAll('[data-action="retirado-hoje"]').forEach(b=>b.addEventListener('click', async ()=>{
+    const c = clientes.find(x=>x.id===b.dataset.id);
+    if(!c) return;
+    c.ultimaRetiradaRelatorio = new Date().toISOString().slice(0,10);
+    await save('clientes', clientes);
+    renderClientesTable();
+    atualizarBannerLembretes();
+    showToast('Retirada de hoje registrada pra ' + (c.apelido || c.nome) + '.');
+  }));
 }
 document.getElementById('btnSalvarCliente').addEventListener('click', async ()=>{
   const nome = document.getElementById('clNome').value.trim();
   const cnpj = document.getElementById('clCnpj').value.trim();
   if(!nome || !cnpj){ showToast('Preencha ao menos nome e CNPJ.'); return; }
+  const periodicidade = document.getElementById('clPeriodicidade').value;
   clientes.push({
     id: uid(), nome, cnpj,
     apelido: document.getElementById('clApelido').value.trim(),
@@ -658,11 +808,15 @@ document.getElementById('btnSalvarCliente').addEventListener('click', async ()=>
     municipio: document.getElementById('clMunicipio').value.trim(),
     cep: document.getElementById('clCep').value.trim(),
     ie: document.getElementById('clIe').value.trim(),
+    periodicidadeRelatorio: periodicidade ? Number(periodicidade) : null,
+    ultimaRetiradaRelatorio: document.getElementById('clUltimaRetirada').value || '',
   });
   await save('clientes', clientes);
   renderClientesSelect(); renderClientesTable();
   updateNpGridPrices();
-  ['clApelido','clNome','clCnpj','clEndereco','clBairro','clMunicipio','clCep','clIe'].forEach(id=>document.getElementById(id).value='');
+  atualizarBannerLembretes();
+  ['clApelido','clNome','clCnpj','clEndereco','clBairro','clMunicipio','clCep','clIe','clUltimaRetirada'].forEach(id=>document.getElementById(id).value='');
+  document.getElementById('clPeriodicidade').value = '';
   showToast('Cliente salvo.');
 });
 
@@ -945,6 +1099,10 @@ function renderPedidos(){
   attachTicketListeners();
   renderRelatorio();
   renderPerdas();
+  populateRpFiltros();
+  if(document.getElementById('previewRelProdutosCard') && document.getElementById('previewRelProdutosCard').style.display !== 'none'){
+    renderRelProdutos();
+  }
 }
 
 function attachTicketListeners(){
@@ -1322,6 +1480,125 @@ function renderRelatorio(){
     }
   }
 }
+// RELATÓRIO DE VENDAS POR PRODUTOS — agrupado por cliente > produto, formato "talão"
+function populateRpFiltros(){
+  const sel = document.getElementById('rpCliente');
+  if(!sel) return;
+  const cur = sel.value;
+  sel.innerHTML = '<option value="">Todos os clientes</option>' +
+    clientes.map(c=>`<option value="${c.id}">${c.apelido || c.nome}</option>`).join('');
+  if(cur) sel.value = cur;
+}
+
+// Retorna: [{ clienteId, clienteNome, produtos:[{codigo, descricao, qtd, unit, vlrVen, desconto, liquido}], totalLiquido }]
+function coletarVendasPorProduto(de, ate, filtroCliente){
+  const entregues = pedidos.filter(p=>
+    p.status==='entregue' &&
+    (!de || p.dataEntrega>=de) &&
+    (!ate || p.dataEntrega<=ate) &&
+    (!filtroCliente || p.clienteId===filtroCliente)
+  );
+
+  const porCliente = {}; // clienteId -> { codigo -> {qtd, vlrVen, desconto} }
+  entregues.forEach(p=>{
+    const dev = p.devolucoes || {};
+    if(!porCliente[p.clienteId]) porCliente[p.clienteId] = {};
+    const grupo = porCliente[p.clienteId];
+    p.itens.forEach(it=>{
+      const unit = getPreco(p.clienteId, it.codigo);
+      const vlrVen = it.quantidade * unit;
+      const qtdDev = dev[it.codigo] || 0;
+      const desconto = qtdDev * unit;
+      if(!grupo[it.codigo]) grupo[it.codigo] = {qtd:0, vlrVen:0, desconto:0};
+      grupo[it.codigo].qtd += it.quantidade;
+      grupo[it.codigo].vlrVen += vlrVen;
+      grupo[it.codigo].desconto += desconto;
+    });
+  });
+
+  return Object.keys(porCliente).map(clienteId=>{
+    const grupo = porCliente[clienteId];
+    const produtosLista = Object.keys(grupo).map(codigo=>{
+      const info = produtoInfo(codigo);
+      const d = grupo[codigo];
+      const unit = d.qtd>0 ? d.vlrVen/d.qtd : getPreco(clienteId, codigo);
+      return {
+        codigo,
+        descricao: info.descricao,
+        qtd: d.qtd,
+        unit,
+        vlrVen: d.vlrVen,
+        desconto: d.desconto,
+        liquido: d.vlrVen - d.desconto
+      };
+    }).sort((a,b)=> a.descricao.localeCompare(b.descricao));
+    const totalLiquido = produtosLista.reduce((s,p)=> s + p.liquido, 0);
+    return { clienteId, clienteNome: clienteNome(clienteId), produtos: produtosLista, totalLiquido };
+  }).sort((a,b)=> a.clienteNome.localeCompare(b.clienteNome));
+}
+
+function gerarRelProdutosHTML(grupos, de, ate){
+  if(grupos.length===0){
+    return '<p class="empty">Nenhum pedido entregue no período/filtro selecionado.</p>';
+  }
+  const periodoTexto = (de || ate) ? `${de ? fmtData(de) : '—'} a ${ate ? fmtData(ate) : '—'}` : 'Todo o período';
+  return grupos.map((g, idx)=> `
+    <div class="comprovante" style="${idx>0 ? 'border-top:2px dashed var(--ink);margin-top:16px;padding-top:14px;' : ''}">
+      <div class="comprovante-titulo">Relatório de Vendas por Produtos</div>
+      <div class="comprovante-campo"><b>Cliente:</b> ${g.clienteNome}</div>
+      <div class="comprovante-campo"><b>Período:</b> ${periodoTexto}</div>
+      ${g.produtos.map(p=> `
+        <div style="margin-top:10px;">
+          <div class="comprovante-campo"><b>Produto:</b> ${p.codigo || '—'}</div>
+          <div class="comprovante-campo"><b>Nome produto:</b> ${p.descricao}</div>
+          <table class="comprovante-tabela">
+            <thead><tr><th>Qtd</th><th>Unit.</th><th>Vlr.Ven.</th><th>Desc</th><th>Líquido</th></tr></thead>
+            <tbody><tr>
+              <td>${p.qtd}</td>
+              <td>R$ ${p.unit.toFixed(2)}</td>
+              <td>R$ ${p.vlrVen.toFixed(2)}</td>
+              <td>R$ ${p.desconto.toFixed(2)}</td>
+              <td>R$ ${p.liquido.toFixed(2)}</td>
+            </tr></tbody>
+          </table>
+        </div>
+      `).join('')}
+      <div class="comprovante-total">Total do cliente: R$ ${g.totalLiquido.toFixed(2)}</div>
+    </div>
+  `).join('');
+}
+
+function renderRelProdutos(){
+  populateRpFiltros();
+  const de = document.getElementById('rpDe').value;
+  const ate = document.getElementById('rpAte').value;
+  const filtroCliente = document.getElementById('rpCliente').value;
+  const grupos = coletarVendasPorProduto(de, ate, filtroCliente);
+  document.getElementById('previewRelProdutosCard').style.display = 'block';
+  document.getElementById('previewRelProdutos').innerHTML = gerarRelProdutosHTML(grupos, de, ate);
+}
+
+document.getElementById('btnGerarRelProdutos').addEventListener('click', renderRelProdutos);
+document.getElementById('btnLimparRelProdutos').addEventListener('click', ()=>{
+  document.getElementById('rpDe').value = '';
+  document.getElementById('rpAte').value = '';
+  document.getElementById('rpCliente').value = '';
+  document.getElementById('previewRelProdutosCard').style.display = 'none';
+  document.getElementById('previewRelProdutos').innerHTML = '';
+});
+document.getElementById('btnImprimirRelProdutos').addEventListener('click', ()=>{
+  if(imprimindo) return;
+  const de = document.getElementById('rpDe').value;
+  const ate = document.getElementById('rpAte').value;
+  const filtroCliente = document.getElementById('rpCliente').value;
+  const grupos = coletarVendasPorProduto(de, ate, filtroCliente);
+  if(grupos.length===0){ showToast('Nada pra imprimir nesse período/filtro.'); return; }
+  imprimindo = true;
+  document.getElementById('printOutput').innerHTML = gerarRelProdutosHTML(grupos, de, ate);
+  window.print();
+  setTimeout(()=>{ imprimindo = false; }, 500);
+});
+
 // PERDAS — filtro por produto e mercado, com gráfico e tabela
 let chartPerdas = null;
 

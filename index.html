@@ -304,6 +304,27 @@
         <button class="btn btn-ghost btn-small" id="btnRecolherTodos" type="button">Recolher todos</button>
       </span>
     </h2>
+    <div class="card">
+      <div class="row2">
+        <div class="field"><label>De</label><input type="date" id="entDe"></div>
+        <div class="field"><label>Até</label><input type="date" id="entAte"></div>
+      </div>
+      <div class="row2">
+        <div class="field"><label>Mercado</label><select id="entMercado"><option value="">Todos os mercados</option></select></div>
+        <div class="field">
+          <label>Nota</label>
+          <select id="entNota">
+            <option value="">Todos os entregues</option>
+            <option value="com">Somente com nota lançada</option>
+            <option value="sem">Somente sem nota lançada</option>
+          </select>
+        </div>
+      </div>
+      <div style="display:flex;gap:8px;">
+        <button class="btn btn-primary btn-small" id="btnFiltrarEntregues" type="button">Filtrar</button>
+        <button class="btn btn-ghost btn-small" id="btnLimparEntregues" type="button">Limpar filtro</button>
+      </div>
+    </div>
     <div id="listaEntregues"></div>
   </section>
 
@@ -884,15 +905,42 @@ function fmtData(d){
   return `${day}/${m}/${y}`;
 }
 
+function populateEntreguesFiltro(){
+  const sel = document.getElementById('entMercado');
+  if(!sel) return;
+  const cur = sel.value;
+  sel.innerHTML = '<option value="">Todos os mercados</option>' +
+    clientes.map(c=>`<option value="${c.id}">${c.apelido || c.nome}</option>`).join('');
+  if(cur) sel.value = cur;
+}
+
 function renderPedidos(){
   const pend = pedidos.filter(p=>p.status==='pendente').sort((a,b)=> a.data.localeCompare(b.data));
-  const entr = pedidos.filter(p=>p.status==='entregue').sort((a,b)=> b.data.localeCompare(a.data));
+
+  populateEntreguesFiltro();
+  const de = document.getElementById('entDe').value;
+  const ate = document.getElementById('entAte').value;
+  const filtroMercado = document.getElementById('entMercado').value;
+  const filtroNota = document.getElementById('entNota').value;
+
+  let entr = pedidos.filter(p=>{
+    if(p.status!=='entregue') return false;
+    const dataRef = p.dataEntrega || p.data;
+    if(de && dataRef < de) return false;
+    if(ate && dataRef > ate) return false;
+    if(filtroMercado && p.clienteId !== filtroMercado) return false;
+    if(filtroNota==='com' && !p.notaNumero) return false;
+    if(filtroNota==='sem' && p.notaNumero) return false;
+    return true;
+  });
+  // mais recentes primeiro (data de entrega, com fallback pra data do pedido)
+  entr.sort((a,b)=> (b.dataEntrega || b.data).localeCompare(a.dataEntrega || a.data));
 
   const pendEl = document.getElementById('listaPendentes');
   pendEl.innerHTML = pend.length ? pend.map(ticketHTML).join('') : '<div class="empty">Nenhum pedido pendente. Lance um novo pedido na aba acima.</div>';
 
   const entrEl = document.getElementById('listaEntregues');
-  entrEl.innerHTML = entr.length ? entr.map(ticketHTML).join('') : '<div class="empty">Nenhum pedido entregue ainda.</div>';
+  entrEl.innerHTML = entr.length ? entr.map(ticketHTML).join('') : '<div class="empty">Nenhum pedido entregue encontrado com esse filtro.</div>';
 
   attachTicketListeners();
   renderRelatorio();
@@ -1389,6 +1437,15 @@ document.getElementById('btnLimparPerdas').addEventListener('click', ()=>{
 });
 document.getElementById('pdAgrupar').addEventListener('change', renderPerdas);
 document.getElementById('pdMetrica').addEventListener('change', renderPerdas);
+
+document.getElementById('btnFiltrarEntregues').addEventListener('click', renderPedidos);
+document.getElementById('btnLimparEntregues').addEventListener('click', ()=>{
+  document.getElementById('entDe').value = '';
+  document.getElementById('entAte').value = '';
+  document.getElementById('entMercado').value = '';
+  document.getElementById('entNota').value = '';
+  renderPedidos();
+});
 
 document.getElementById('btnExpandirTodos').addEventListener('click', ()=>{
   pedidos.filter(p=>p.status==='entregue').forEach(p=> ticketsExpandidos.add(p.id));

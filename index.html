@@ -150,10 +150,11 @@
     padding:3px 10px;border-radius:6px;transform:rotate(8deg);text-transform:uppercase;opacity:.85;
   }
 
-  table.list{width:100%;border-collapse:collapse;font-size:14px;}
+  .table-scroll{overflow-x:auto;-webkit-overflow-scrolling:touch;margin:-18px;padding:18px;}
+  table.list{width:100%;border-collapse:collapse;font-size:14px;min-width:640px;}
   table.list th{text-align:left;font-size:11px;text-transform:uppercase;letter-spacing:.03em;
-    color:var(--ink-soft);border-bottom:1.5px solid var(--forest);padding:8px 6px;}
-  table.list td{padding:9px 6px;border-bottom:1px solid var(--line);}
+    color:var(--ink-soft);border-bottom:1.5px solid var(--forest);padding:8px 6px;white-space:nowrap;}
+  table.list td{padding:9px 6px;border-bottom:1px solid var(--line);white-space:nowrap;}
   table.list tr:last-child td{border-bottom:none;}
   .muted{color:var(--ink-soft);font-size:12.5px;}
   .empty{padding:28px 16px;text-align:center;color:var(--ink-soft);font-size:14px;}
@@ -380,7 +381,7 @@
   <section class="panel" id="panel-clientes">
     <h2 class="sec">Clientes cadastrados</h2>
     <div class="card">
-      <table class="list" id="tabelaClientes"></table>
+      <div class="table-scroll"><table class="list" id="tabelaClientes"></table></div>
     </div>
     <h2 class="sec">Adicionar cliente</h2>
     <div class="card">
@@ -418,7 +419,7 @@
     <h2 class="sec">Produtos cadastrados</h2>
     <p class="muted" style="margin-top:-6px;">O preço aqui é o padrão, usado quando o cliente não tiver um preço específico definido (veja a aba Clientes → Preços).</p>
     <div class="card">
-      <table class="list" id="tabelaProdutos"></table>
+      <div class="table-scroll"><table class="list" id="tabelaProdutos"></table></div>
     </div>
     <h2 class="sec">Adicionar produto</h2>
     <div class="card">
@@ -476,7 +477,7 @@
       <canvas id="graficoPerdas" height="120"></canvas>
     </div>
     <div class="card">
-      <table class="list" id="tabelaPerdas"></table>
+      <div class="table-scroll"><table class="list" id="tabelaPerdas"></table></div>
     </div>
   </section>
 
@@ -494,7 +495,7 @@
       </div>
     </div>
     <div class="card">
-      <table class="list" id="tabelaRelatorio"></table>
+      <div class="table-scroll"><table class="list" id="tabelaRelatorio"></table></div>
     </div>
     <div id="relatorioPedidosLista"></div>
   </section>

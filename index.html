@@ -854,12 +854,10 @@ function renderClientesSelect(){
 function renderClientesTable(){
   const t = document.getElementById('tabelaClientes');
   if(clientes.length===0){ t.innerHTML = '<tr><td class="empty">Nenhum cliente cadastrado ainda.</td></tr>'; return; }
-  t.innerHTML = `<tr><th>Apelido</th><th>Razão social</th><th>CNPJ</th><th>Local</th><th>Lembrete</th><th>Última retirada</th><th></th><th></th></tr>` +
+  t.innerHTML = `<tr><th>Apelido</th><th>Razão social</th><th>Lembrete</th><th>Última retirada</th><th></th><th></th></tr>` +
     clientes.map(c=>`<tr>
       <td data-label="Apelido">${c.apelido||'—'}</td>
       <td data-label="Razão social">${c.nome}</td>
-      <td data-label="CNPJ">${c.cnpj}</td>
-      <td data-label="Local">${c.bairro}, ${c.municipio}</td>
       <td data-label="Lembrete">
         <select data-action="periodicidade" data-id="${c.id}" style="width:auto;padding:8px 10px;font-size:13px;">
           <option value="" ${!c.periodicidadeRelatorio ? 'selected' : ''}>Sem lembrete</option>

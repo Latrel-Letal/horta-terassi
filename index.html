@@ -344,6 +344,7 @@
     <button data-tab="perdas">Perdas</button>
     <button data-tab="relatorio">Relatório</button>
     <button data-tab="relprodutos">Rel. Produtos</button>
+    <button data-tab="importar">Importar</button>
   </nav>
 
   <section class="panel active" id="panel-pedidos">
@@ -546,6 +547,22 @@
     </div>
     <div class="card" id="previewRelProdutosCard" style="display:none;">
       <div id="previewRelProdutos"></div>
+    </div>
+  </section>
+
+  <section class="panel" id="panel-importar">
+    <h2 class="sec">Importar histórico</h2>
+    <p class="muted" style="margin-top:-8px;">Suba aqui o arquivo <code>importacao_horta.json</code> gerado a partir das notas fiscais antigas. Clientes e produtos já cadastrados (mesmo CNPJ/código) não são duplicados — só os novos são criados.</p>
+    <div class="card">
+      <div class="field">
+        <label>Arquivo de importação (.json)</label>
+        <input type="file" id="impArquivo" accept="application/json,.json">
+      </div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;">
+        <button class="btn btn-ghost btn-small" id="btnPrevisualizarImportacao" type="button">Pré-visualizar</button>
+        <button class="btn btn-primary btn-small" id="btnConfirmarImportacao" type="button" style="display:none;">Confirmar importação</button>
+      </div>
+      <div id="resumoImportacao" style="margin-top:14px;"></div>
     </div>
   </section>
 
@@ -754,6 +771,145 @@ async function importarPedidosEmLote(novosPedidos){
     await batch.commit();
   }
 }
+
+// IMPORTAÇÃO DO HISTÓRICO (notas antigas processadas pelo extrair_notas.py)
+function normalizarCnpj(cnpj){
+  return (cnpj || '').replace(/\D/g, '');
+}
+let importacaoPendente = null;
+
+document.getElementById('btnPrevisualizarImportacao').addEventListener('click', async ()=>{
+  const arquivoInput = document.getElementById('impArquivo');
+  const resumoEl = document.getElementById('resumoImportacao');
+  const btnConfirmar = document.getElementById('btnConfirmarImportacao');
+  btnConfirmar.style.display = 'none';
+  importacaoPendente = null;
+
+  const arquivo = arquivoInput.files[0];
+  if(!arquivo){ resumoEl.innerHTML = '<p class="muted">Escolha o arquivo importacao_horta.json primeiro.</p>'; return; }
+
+  let dados;
+  try{
+    const texto = await arquivo.text();
+    dados = JSON.parse(texto);
+  }catch(e){
+    resumoEl.innerHTML = '<p class="muted">Não consegui ler esse arquivo — confira se é o importacao_horta.json gerado pelo script.</p>';
+    return;
+  }
+  if(!Array.isArray(dados.clientes) || !Array.isArray(dados.produtos) || !Array.isArray(dados.pedidos)){
+    resumoEl.innerHTML = '<p class="muted">Arquivo em formato inesperado (faltam as listas de clientes/produtos/pedidos).</p>';
+    return;
+  }
+
+  const cnpjsExistentes = new Set(clientes.map(c=>normalizarCnpj(c.cnpj)));
+  const codigosExistentes = new Set(produtos.map(p=>p.codigo));
+  const chavesExistentes = new Set(pedidos.map(p=>p.notaChave).filter(Boolean));
+
+  const novosClientes = dados.clientes.filter(c=> !cnpjsExistentes.has(normalizarCnpj(c.cnpj))).length;
+  const novosProdutos = dados.produtos.filter(p=> !codigosExistentes.has(p.codigo)).length;
+  const pedidosDuplicados = dados.pedidos.filter(p=> p.notaChave && chavesExistentes.has(p.notaChave)).length;
+  const pedidosNovos = dados.pedidos.length - pedidosDuplicados;
+
+  resumoEl.innerHTML = `
+    <div class="resumo-block">
+      <h4>Resumo da importação</h4>
+      <div class="resumo-line">Clientes novos a criar: ${novosClientes} (de ${dados.clientes.length} no arquivo)
+Produtos novos a criar: ${novosProdutos} (de ${dados.produtos.length} no arquivo)
+Pedidos novos a importar: ${pedidosNovos}${pedidosDuplicados ? `
+Pedidos já importados antes (serão ignorados): ${pedidosDuplicados}` : ''}</div>
+    </div>`;
+
+  importacaoPendente = dados;
+  btnConfirmar.style.display = 'inline-block';
+});
+
+document.getElementById('btnConfirmarImportacao').addEventListener('click', async ()=>{
+  if(!importacaoPendente) return;
+  const dados = importacaoPendente;
+  const resumoEl = document.getElementById('resumoImportacao');
+  const btnConfirmar = document.getElementById('btnConfirmarImportacao');
+  btnConfirmar.disabled = true;
+  showToast('Importando... isso pode levar um instante.');
+
+  // 1) Clientes — reaproveita quem já existe pelo CNPJ, cria só os novos
+  const cnpjParaId = {};
+  clientes.forEach(c=> cnpjParaId[normalizarCnpj(c.cnpj)] = c.id);
+  dados.clientes.forEach(c=>{
+    const norm = normalizarCnpj(c.cnpj);
+    if(cnpjParaId[norm]) return;
+    const novo = {
+      id: uid(),
+      nome: c.nome || '',
+      apelido: c.apelido || '',
+      cnpj: c.cnpj || '',
+      endereco: c.endereco || '',
+      bairro: c.bairro || '',
+      municipio: c.municipio || '',
+      cep: c.cep || '',
+      ie: c.ie || '',
+      periodicidadeRelatorio: null,
+      ultimaRetiradaRelatorio: '',
+    };
+    clientes.push(novo);
+    cnpjParaId[norm] = novo.id;
+  });
+  await save('clientes', clientes);
+  renderClientesSelect();
+  renderClientesTable();
+
+  // 2) Produtos — reaproveita pelo código, cria só os novos
+  const codigosExistentes = new Set(produtos.map(p=>p.codigo));
+  dados.produtos.forEach(p=>{
+    if(codigosExistentes.has(p.codigo)) return;
+    produtos.push({
+      codigo: p.codigo,
+      descricao: p.descricao || '',
+      ncm: p.ncm || '',
+      cfop: p.cfop || '5101',
+      unidade: p.unidade || 'UN',
+      valor: p.valor || 0,
+    });
+    codigosExistentes.add(p.codigo);
+  });
+  await save('produtos', produtos);
+  renderProdutosTable();
+  if(typeof renderNpProdutoOptions === 'function') renderNpProdutoOptions();
+  if(typeof renderNpGrid === 'function') renderNpGrid();
+
+  // 3) Pedidos — pula quem já foi importado antes (mesma chave de acesso)
+  const chavesExistentes = new Set(pedidos.map(p=>p.notaChave).filter(Boolean));
+  const pedidosProntos = [];
+  dados.pedidos.forEach(p=>{
+    if(p.notaChave && chavesExistentes.has(p.notaChave)) return;
+    const clienteId = cnpjParaId[p.clienteCnpj];
+    if(!clienteId) return;
+    const novoPedido = {
+      id: uid(),
+      clienteId,
+      data: p.data || '',
+      itens: p.itens || [],
+      status: p.status || 'entregue',
+      notaNumero: p.notaNumero || '',
+      notaChave: p.notaChave || '',
+      dataEntrega: p.dataEntrega || '',
+    };
+    pedidosProntos.push(novoPedido);
+    if(p.notaChave) chavesExistentes.add(p.notaChave);
+  });
+  if(pedidosProntos.length){
+    await importarPedidosEmLote(pedidosProntos);
+    pedidos.push(...pedidosProntos);
+  }
+
+  renderPedidos();
+  atualizarBannerLembretes();
+  btnConfirmar.style.display = 'none';
+  btnConfirmar.disabled = false;
+  importacaoPendente = null;
+  document.getElementById('impArquivo').value = '';
+  resumoEl.innerHTML = `<p class="muted">Importação concluída: ${pedidosProntos.length} pedido(s) novo(s) adicionado(s).</p>`;
+  showToast(`Importação concluída: ${pedidosProntos.length} pedido(s) adicionado(s).`);
+});
 
 async function getOrInit(key, def){
   try{

@@ -639,7 +639,7 @@ function uid(){ return Date.now().toString(36) + Math.random().toString(36).slic
 async function loadAll(){
   produtos = await getOrInit('produtos', DEFAULT_PRODUTOS);
   clientes = await getOrInit('clientes', DEFAULT_CLIENTES);
-  pedidos = await getOrInit('pedidos', []);
+  pedidos = await loadPedidos();
   precos = await getOrInit('precos', {});
   transporteConfig = await getOrInit('transporte', { placa:'', uf:'PR' });
   renderClientesSelect();
@@ -649,6 +649,80 @@ async function loadAll(){
   renderNpGrid();
   atualizarBannerLembretes();
   document.getElementById('npData').valueAsDate = new Date();
+}
+
+// PEDIDOS — cada pedido é salvo como um documento próprio dentro de
+// horta_data/pedidos/items/{id}. Isso evita o limite de 1MB por documento
+// do Firestore, que um array único com todo o histórico acabaria estourando.
+function pedidosCol(){
+  return db.collection('horta_data').doc('pedidos').collection('items');
+}
+
+async function loadPedidos(){
+  try{
+    // Migração única: se existir o formato antigo (array gigante em
+    // horta_data/pedidos com campo "value"), move cada item pra um
+    // documento próprio na subcoleção e depois limpa o campo antigo.
+    const legacyRef = db.collection('horta_data').doc('pedidos');
+    const legacySnap = await legacyRef.get();
+    if(legacySnap.exists && legacySnap.data() && Array.isArray(legacySnap.data().value) && legacySnap.data().value.length){
+      const antigos = legacySnap.data().value;
+      showToast(`Migrando ${antigos.length} pedido(s) do formato antigo...`);
+      const batchSize = 400; // limite de 500 operações por batch do Firestore
+      for(let i=0; i<antigos.length; i+=batchSize){
+        const lote = antigos.slice(i, i+batchSize);
+        const batch = db.batch();
+        lote.forEach(p=>{
+          if(!p.id) p.id = uid();
+          batch.set(pedidosCol().doc(p.id), p);
+        });
+        await batch.commit();
+      }
+      await legacyRef.set({value: [], migrado: true});
+      showToast('Migração concluída.');
+    }
+
+    const snap = await pedidosCol().get();
+    return snap.docs.map(d=> d.data());
+  }catch(e){
+    console.error(e);
+    showToast('Erro ao carregar pedidos. Verifique sua internet.');
+    return [];
+  }
+}
+
+async function savePedido(pedido){
+  try{
+    await pedidosCol().doc(pedido.id).set(pedido);
+  }catch(e){
+    console.error(e);
+    showToast('Erro ao salvar pedido. Tente novamente.');
+  }
+}
+
+async function deletePedidoDoc(id){
+  try{
+    await pedidosCol().doc(id).delete();
+  }catch(e){
+    console.error(e);
+    showToast('Erro ao excluir pedido. Tente novamente.');
+  }
+}
+
+// Importação em lote (usada para trazer o histórico extraído das notas antigas).
+// Recebe um array de pedidos já no formato do sistema e grava tudo em lotes,
+// sem precisar passar pelo array local nem reescrever um documento único.
+async function importarPedidosEmLote(novosPedidos){
+  const batchSize = 400;
+  for(let i=0; i<novosPedidos.length; i+=batchSize){
+    const lote = novosPedidos.slice(i, i+batchSize);
+    const batch = db.batch();
+    lote.forEach(p=>{
+      if(!p.id) p.id = uid();
+      batch.set(pedidosCol().doc(p.id), p);
+    });
+    await batch.commit();
+  }
 }
 
 async function getOrInit(key, def){
@@ -1012,16 +1086,16 @@ document.getElementById('btnSalvarPedido').addEventListener('click', async ()=>{
   if(itens.length===0){ showToast('Preencha a quantidade de ao menos uma espécie.'); return; }
   if(editingPedidoId){
     const p = pedidos.find(x=>x.id===editingPedidoId);
-    if(p){ p.clienteId = clienteId; p.data = data; p.itens = itens; }
-    await save('pedidos', pedidos);
+    if(p){ p.clienteId = clienteId; p.data = data; p.itens = itens; await savePedido(p); }
     cancelarEdicaoPedido();
     renderPedidos();
     document.querySelector('nav.tabs button[data-tab="pedidos"]').click();
     showToast('Pedido atualizado.');
     return;
   }
-  pedidos.push({ id: uid(), clienteId, data, itens, status:'pendente', notaNumero:'', notaChave:'', dataEntrega:'' });
-  await save('pedidos', pedidos);
+  const novoPedido = { id: uid(), clienteId, data, itens, status:'pendente', notaNumero:'', notaChave:'', dataEntrega:'' };
+  pedidos.push(novoPedido);
+  await savePedido(novoPedido);
   clearNpGrid();
   document.getElementById('npItens').innerHTML='';
   renderPedidos();
@@ -1132,7 +1206,7 @@ async function onDevolucaoChange(e){
   if(!p.devolucoes) p.devolucoes = {};
   if(qtd > 0) p.devolucoes[codigo] = qtd;
   else delete p.devolucoes[codigo];
-  await save('pedidos', pedidos);
+  await savePedido(p);
   renderPedidos();
   showToast('Perda registrada.');
 }
@@ -1197,7 +1271,7 @@ async function onEntregar(e){
   const p = pedidos.find(x=>x.id===id);
   p.status = 'entregue';
   p.dataEntrega = new Date().toISOString().slice(0,10);
-  await save('pedidos', pedidos);
+  await savePedido(p);
   renderPedidos();
   openResumo(id);
 }
@@ -1206,7 +1280,7 @@ async function onExcluir(e){
   const id = e.target.dataset.id;
   if(!confirm('Excluir este pedido?')) return;
   pedidos = pedidos.filter(x=>x.id!==id);
-  await save('pedidos', pedidos);
+  await deletePedidoDoc(id);
   renderPedidos();
 }
 async function onReabrir(e){
@@ -1222,7 +1296,7 @@ async function onReabrir(e){
   p.devolucoes = {};
   p.notaNumero = '';
   p.notaChave = '';
-  await save('pedidos', pedidos);
+  await savePedido(p);
   renderPedidos();
   showToast('Pedido reaberto. Você já pode editar os itens.');
 }
@@ -1396,7 +1470,7 @@ document.getElementById('btnSalvarNota').addEventListener('click', async ()=>{
   if(!p) return;
   p.notaNumero = document.getElementById('notaNumero').value.trim();
   p.notaChave = document.getElementById('notaChave').value.trim();
-  await save('pedidos', pedidos);
+  await savePedido(p);
   renderPedidos();
   showToast('Dados da nota salvos.');
   document.getElementById('modalResumo').classList.remove('open');

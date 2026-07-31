@@ -150,12 +150,37 @@
     padding:3px 10px;border-radius:6px;transform:rotate(8deg);text-transform:uppercase;opacity:.85;
   }
 
-  .table-scroll{overflow-x:auto;-webkit-overflow-scrolling:touch;margin:-18px;padding:18px;}
-  table.list{width:100%;border-collapse:collapse;font-size:14px;min-width:640px;}
-  table.list th{text-align:left;font-size:11px;text-transform:uppercase;letter-spacing:.03em;
-    color:var(--ink-soft);border-bottom:1.5px solid var(--forest);padding:8px 6px;white-space:nowrap;}
-  table.list td{padding:9px 6px;border-bottom:1px solid var(--line);white-space:nowrap;}
+  .table-scroll{width:100%;}
+  table.list{width:100%;border-collapse:collapse;font-size:14.5px;}
+  table.list th{text-align:left;font-size:11.5px;text-transform:uppercase;letter-spacing:.04em;
+    color:var(--ink-soft);border-bottom:1.5px solid var(--forest);padding:10px 12px;}
+  table.list td{padding:12px;border-bottom:1px solid var(--line);}
   table.list tr:last-child td{border-bottom:none;}
+
+  /* Em telas estreitas, cada linha vira um "cartão" com rótulo + valor, em vez de colunas com scroll */
+  @media (max-width:860px){
+    table.list.cards, table.list.cards thead, table.list.cards tbody,
+    table.list.cards th, table.list.cards td, table.list.cards tr{ display:block; }
+    table.list.cards tr:has(th){ display:none; }
+    table.list.cards tbody tr{
+      border:1px solid var(--line);border-radius:9px;padding:6px 12px;margin-bottom:12px;
+      background:#fff;box-shadow:var(--shadow);
+    }
+    table.list.cards tbody tr:last-child{ margin-bottom:0; }
+    table.list.cards td{
+      display:flex;justify-content:space-between;align-items:center;gap:14px;
+      padding:9px 0;border-bottom:1px dashed var(--line);white-space:normal;text-align:right;
+    }
+    table.list.cards td:empty{ display:none; }
+    table.list.cards td:last-child{ border-bottom:none; }
+    table.list.cards td::before{
+      content:attr(data-label);font-weight:600;font-size:10.5px;text-transform:uppercase;
+      letter-spacing:.04em;color:var(--ink-soft);text-align:left;white-space:nowrap;flex-shrink:0;
+    }
+    table.list.cards td[data-label=""]::before{ display:none; }
+    table.list.cards td[data-label=""]{ justify-content:center; }
+    table.list.cards td.empty{ display:block; text-align:center; }
+  }
   .muted{color:var(--ink-soft);font-size:12.5px;}
   .empty{padding:28px 16px;text-align:center;color:var(--ink-soft);font-size:14px;}
 
@@ -381,7 +406,7 @@
   <section class="panel" id="panel-clientes">
     <h2 class="sec">Clientes cadastrados</h2>
     <div class="card">
-      <div class="table-scroll"><table class="list" id="tabelaClientes"></table></div>
+      <div class="table-scroll"><table class="list cards" id="tabelaClientes"></table></div>
     </div>
     <h2 class="sec">Adicionar cliente</h2>
     <div class="card">
@@ -419,7 +444,7 @@
     <h2 class="sec">Produtos cadastrados</h2>
     <p class="muted" style="margin-top:-6px;">O preço aqui é o padrão, usado quando o cliente não tiver um preço específico definido (veja a aba Clientes → Preços).</p>
     <div class="card">
-      <div class="table-scroll"><table class="list" id="tabelaProdutos"></table></div>
+      <div class="table-scroll"><table class="list cards" id="tabelaProdutos"></table></div>
     </div>
     <h2 class="sec">Adicionar produto</h2>
     <div class="card">
@@ -477,7 +502,7 @@
       <canvas id="graficoPerdas" height="120"></canvas>
     </div>
     <div class="card">
-      <div class="table-scroll"><table class="list" id="tabelaPerdas"></table></div>
+      <div class="table-scroll"><table class="list cards" id="tabelaPerdas"></table></div>
     </div>
   </section>
 
@@ -495,7 +520,7 @@
       </div>
     </div>
     <div class="card">
-      <div class="table-scroll"><table class="list" id="tabelaRelatorio"></table></div>
+      <div class="table-scroll"><table class="list cards" id="tabelaRelatorio"></table></div>
     </div>
     <div id="relatorioPedidosLista"></div>
   </section>
@@ -830,21 +855,21 @@ function renderClientesTable(){
   if(clientes.length===0){ t.innerHTML = '<tr><td class="empty">Nenhum cliente cadastrado ainda.</td></tr>'; return; }
   t.innerHTML = `<tr><th>Apelido</th><th>Razão social</th><th>CNPJ</th><th>Local</th><th>Lembrete</th><th>Última retirada</th><th></th><th></th></tr>` +
     clientes.map(c=>`<tr>
-      <td>${c.apelido||'—'}</td>
-      <td>${c.nome}</td>
-      <td>${c.cnpj}</td>
-      <td>${c.bairro}, ${c.municipio}</td>
-      <td>
-        <select data-action="periodicidade" data-id="${c.id}" style="width:auto;padding:6px 8px;font-size:12.5px;">
+      <td data-label="Apelido">${c.apelido||'—'}</td>
+      <td data-label="Razão social">${c.nome}</td>
+      <td data-label="CNPJ">${c.cnpj}</td>
+      <td data-label="Local">${c.bairro}, ${c.municipio}</td>
+      <td data-label="Lembrete">
+        <select data-action="periodicidade" data-id="${c.id}" style="width:auto;padding:8px 10px;font-size:13px;">
           <option value="" ${!c.periodicidadeRelatorio ? 'selected' : ''}>Sem lembrete</option>
           <option value="7" ${c.periodicidadeRelatorio==7 ? 'selected' : ''}>7 dias</option>
           <option value="15" ${c.periodicidadeRelatorio==15 ? 'selected' : ''}>15 dias</option>
           <option value="30" ${c.periodicidadeRelatorio==30 ? 'selected' : ''}>30 dias</option>
         </select>
       </td>
-      <td><input type="date" data-action="ultima-retirada" data-id="${c.id}" value="${c.ultimaRetiradaRelatorio || ''}" style="width:auto;padding:6px 8px;font-size:12.5px;"></td>
-      <td>${c.periodicidadeRelatorio ? `<button class="btn btn-ghost btn-small" data-action="retirado-hoje" data-id="${c.id}">Retirado hoje</button>` : ''}</td>
-      <td><button class="btn btn-ghost btn-small" data-action="precos" data-id="${c.id}">Preços</button></td>
+      <td data-label="Última retirada"><input type="date" data-action="ultima-retirada" data-id="${c.id}" value="${c.ultimaRetiradaRelatorio || ''}" style="width:auto;padding:8px 10px;font-size:13px;"></td>
+      <td data-label="">${c.periodicidadeRelatorio ? `<button class="btn btn-ghost btn-small" data-action="retirado-hoje" data-id="${c.id}">Retirado hoje</button>` : ''}</td>
+      <td data-label="">${`<button class="btn btn-ghost btn-small" data-action="precos" data-id="${c.id}">Preços</button>`}</td>
     </tr>`).join('');
   t.querySelectorAll('[data-action="precos"]').forEach(b=>b.addEventListener('click', ()=>openPrecos(b.dataset.id)));
   t.querySelectorAll('[data-action="periodicidade"]').forEach(sel=>sel.addEventListener('change', async ()=>{
@@ -902,7 +927,7 @@ function renderProdutosTable(){
   const t = document.getElementById('tabelaProdutos');
   if(produtos.length===0){ t.innerHTML = '<tr><td class="empty">Nenhum produto cadastrado.</td></tr>'; return; }
   t.innerHTML = `<tr><th>Código</th><th>Descrição</th><th>Un.</th><th>Preço padrão</th><th></th><th></th></tr>` +
-    produtos.map(p=>`<tr><td>${p.codigo}</td><td>${p.descricao}</td><td>${p.unidade}</td><td>R$ ${p.valor.toFixed(2)}</td><td><button class="btn btn-ghost btn-small" data-action="editar-produto" data-codigo="${p.codigo}">Editar</button></td><td><button class="btn btn-danger btn-small" data-action="excluir-produto" data-codigo="${p.codigo}">Excluir</button></td></tr>`).join('');
+    produtos.map(p=>`<tr><td data-label="Código">${p.codigo}</td><td data-label="Descrição">${p.descricao}</td><td data-label="Un.">${p.unidade}</td><td data-label="Preço padrão">R$ ${p.valor.toFixed(2)}</td><td data-label=""><button class="btn btn-ghost btn-small" data-action="editar-produto" data-codigo="${p.codigo}">Editar</button></td><td data-label=""><button class="btn btn-danger btn-small" data-action="excluir-produto" data-codigo="${p.codigo}">Excluir</button></td></tr>`).join('');
   t.querySelectorAll('[data-action="editar-produto"]').forEach(b=>b.addEventListener('click', ()=>iniciarEdicaoProduto(b.dataset.codigo)));
   t.querySelectorAll('[data-action="excluir-produto"]').forEach(b=>b.addEventListener('click', ()=>excluirProduto(b.dataset.codigo)));
 }
@@ -1539,12 +1564,12 @@ function renderRelatorio(){
     const d = porCliente[id];
     const liq = d.bruto - d.devolucao;
     totBruto += d.bruto; totDev += d.devolucao; totLiq += liq;
-    return `<tr><td>${c ? (c.apelido||c.nome) : '(removido)'}</td><td>${d.pedidos}</td><td>R$ ${d.bruto.toFixed(2)}</td><td>R$ ${d.devolucao.toFixed(2)}</td><td><b>R$ ${liq.toFixed(2)}</b></td></tr>`;
+    return `<tr><td data-label="Mercado">${c ? (c.apelido||c.nome) : '(removido)'}</td><td data-label="Pedidos">${d.pedidos}</td><td data-label="Bruto">R$ ${d.bruto.toFixed(2)}</td><td data-label="Devolução">R$ ${d.devolucao.toFixed(2)}</td><td data-label="Líquido"><b>R$ ${liq.toFixed(2)}</b></td></tr>`;
   }).join('');
 
   tabela.innerHTML = `<tr><th>Mercado</th><th>Pedidos</th><th>Bruto</th><th>Devolução</th><th>Líquido</th></tr>` +
     linhas +
-    `<tr style="border-top:2px solid var(--forest);"><td><b>Total</b></td><td><b>${entregues.length}</b></td><td><b>R$ ${totBruto.toFixed(2)}</b></td><td><b>R$ ${totDev.toFixed(2)}</b></td><td><b>R$ ${totLiq.toFixed(2)}</b></td></tr>`;
+    `<tr style="border-top:2px solid var(--forest);"><td data-label="Total"><b>Total</b></td><td data-label="Pedidos"><b>${entregues.length}</b></td><td data-label="Bruto"><b>R$ ${totBruto.toFixed(2)}</b></td><td data-label="Devolução"><b>R$ ${totDev.toFixed(2)}</b></td><td data-label="Líquido"><b>R$ ${totLiq.toFixed(2)}</b></td></tr>`;
 
   const listaEl = document.getElementById('relatorioPedidosLista');
   if(listaEl){
@@ -1773,11 +1798,11 @@ function renderPerdas(){
   let totQtd=0, totValor=0;
   const linhas = ordenados.map(r=>{
     totQtd += r.quantidade; totValor += r.valor;
-    return `<tr><td>${fmtData(r.data)}</td><td>${r.clienteNome}</td><td>${r.produtoDescricao}</td><td>${r.quantidade}</td><td>R$ ${r.valor.toFixed(2)}</td></tr>`;
+    return `<tr><td data-label="Data">${fmtData(r.data)}</td><td data-label="Mercado">${r.clienteNome}</td><td data-label="Produto">${r.produtoDescricao}</td><td data-label="Qtd. perdida">${r.quantidade}</td><td data-label="Valor perdido">R$ ${r.valor.toFixed(2)}</td></tr>`;
   }).join('');
   tabela.innerHTML = `<tr><th>Data</th><th>Mercado</th><th>Produto</th><th>Qtd. perdida</th><th>Valor perdido</th></tr>` +
     linhas +
-    `<tr style="border-top:2px solid var(--forest);"><td colspan="3"><b>Total</b></td><td><b>${totQtd}</b></td><td><b>R$ ${totValor.toFixed(2)}</b></td></tr>`;
+    `<tr style="border-top:2px solid var(--forest);"><td data-label="Total" colspan="3"><b>Total</b></td><td data-label="Qtd. perdida"><b>${totQtd}</b></td><td data-label="Valor perdido"><b>R$ ${totValor.toFixed(2)}</b></td></tr>`;
 }
 document.getElementById('btnFiltrarPerdas').addEventListener('click', renderPerdas);
 document.getElementById('btnLimparPerdas').addEventListener('click', ()=>{

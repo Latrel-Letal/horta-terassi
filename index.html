@@ -417,9 +417,9 @@
     <div class="card">
       <div class="row2">
         <div class="field"><label>Apelido (como vocês chamam)</label><input type="text" id="clApelido" placeholder="Ex: Muffato Duque"></div>
-        <div class="field"><label>Razão social</label><input type="text" id="clNome" placeholder="Ex: Irmãos Muffato & Cia Ltda"></div>
+        <div class="field"><label>Razão social <span class="muted">(opcional)</span></label><input type="text" id="clNome" placeholder="Ex: Irmãos Muffato & Cia Ltda"></div>
       </div>
-      <div class="field"><label>CNPJ</label><input type="text" id="clCnpj" placeholder="00.000.000/0000-00"></div>
+      <div class="field"><label>CNPJ, CPF ou MEI <span class="muted">(opcional)</span></label><input type="text" id="clCnpj" placeholder="CNPJ, CPF ou MEI — deixe em branco se não tiver"></div>
       <div class="field"><label>Endereço</label><input type="text" id="clEndereco" placeholder="Rua/Avenida, número"></div>
       <div class="row2">
         <div class="field"><label>Bairro</label><input type="text" id="clBairro"></div>
@@ -801,11 +801,11 @@ document.getElementById('btnPrevisualizarImportacao').addEventListener('click', 
     return;
   }
 
-  const cnpjsExistentes = new Set(clientes.map(c=>normalizarCnpj(c.cnpj)));
+  const cnpjsExistentes = new Set(clientes.map(c=>normalizarCnpj(c.cnpj)).filter(Boolean));
   const codigosExistentes = new Set(produtos.map(p=>p.codigo));
   const chavesExistentes = new Set(pedidos.map(p=>p.notaChave).filter(Boolean));
 
-  const novosClientes = dados.clientes.filter(c=> !cnpjsExistentes.has(normalizarCnpj(c.cnpj))).length;
+  const novosClientes = dados.clientes.filter(c=> !normalizarCnpj(c.cnpj) || !cnpjsExistentes.has(normalizarCnpj(c.cnpj))).length;
   const novosProdutos = dados.produtos.filter(p=> !codigosExistentes.has(p.codigo)).length;
   const pedidosDuplicados = dados.pedidos.filter(p=> p.notaChave && chavesExistentes.has(p.notaChave)).length;
   const pedidosNovos = dados.pedidos.length - pedidosDuplicados;
@@ -833,10 +833,10 @@ document.getElementById('btnConfirmarImportacao').addEventListener('click', asyn
 
   // 1) Clientes — reaproveita quem já existe pelo CNPJ, cria só os novos
   const cnpjParaId = {};
-  clientes.forEach(c=> cnpjParaId[normalizarCnpj(c.cnpj)] = c.id);
+  clientes.forEach(c=> { const n = normalizarCnpj(c.cnpj); if(n) cnpjParaId[n] = c.id; });
   dados.clientes.forEach(c=>{
     const norm = normalizarCnpj(c.cnpj);
-    if(cnpjParaId[norm]) return;
+    if(norm && cnpjParaId[norm]) return;
     const novo = {
       id: uid(),
       nome: c.nome || '',
@@ -1022,7 +1022,7 @@ function renderClientesTable(){
   t.innerHTML = `<tr><th>Apelido</th><th>Razão social</th><th>Lembrete</th><th>Última retirada</th><th></th><th></th></tr>` +
     listaFiltrada.map(c=>`<tr>
       <td data-label="Apelido">${c.apelido||'—'}</td>
-      <td data-label="Razão social">${c.nome}</td>
+      <td data-label="Razão social">${c.nome||'—'}</td>
       <td data-label="Lembrete">
         <select data-action="periodicidade" data-id="${c.id}" style="width:auto;padding:8px 10px;font-size:13px;">
           <option value="" ${!c.periodicidadeRelatorio ? 'selected' : ''}>Sem lembrete</option>
@@ -1065,11 +1065,11 @@ document.getElementById('clBusca').addEventListener('input', renderClientesTable
 document.getElementById('btnSalvarCliente').addEventListener('click', async ()=>{
   const nome = document.getElementById('clNome').value.trim();
   const cnpj = document.getElementById('clCnpj').value.trim();
-  if(!nome || !cnpj){ showToast('Preencha ao menos nome e CNPJ.'); return; }
+  const apelido = document.getElementById('clApelido').value.trim();
+  if(!apelido && !nome){ showToast('Preencha ao menos o Apelido (ou a Razão social).'); return; }
   const periodicidade = document.getElementById('clPeriodicidade').value;
   clientes.push({
-    id: uid(), nome, cnpj,
-    apelido: document.getElementById('clApelido').value.trim(),
+    id: uid(), nome, cnpj, apelido,
     endereco: document.getElementById('clEndereco').value.trim(),
     bairro: document.getElementById('clBairro').value.trim(),
     municipio: document.getElementById('clMunicipio').value.trim(),
@@ -1505,8 +1505,8 @@ function gerarTextoFicha(p, c, linhas, total){
 ${EMITENTE_TXT}
 
 == DESTINATÁRIO ==
-${c.nome}
-CNPJ: ${c.cnpj} | IE: ${c.ie}
+${c.nome || c.apelido}
+${c.cnpj ? 'CNPJ/CPF/MEI: ' + c.cnpj + ' | ' : ''}IE: ${c.ie}
 ${c.endereco} — ${c.bairro}
 ${c.municipio} | CEP: ${c.cep}
 

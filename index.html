@@ -414,7 +414,14 @@
         <div class="field"><label>Até</label><input type="date" id="entAte"></div>
       </div>
       <div class="row2">
-        <div class="field"><label>Mercado</label><select id="entMercado"><option value="">Todos os mercados</option></select></div>
+        <div class="field">
+          <label>Mercado</label>
+          <div class="ac-combo">
+            <input type="text" id="entMercadoBusca" placeholder="Todos os mercados" autocomplete="off">
+            <input type="hidden" id="entMercado">
+            <div id="entMercadoLista" class="ac-list"></div>
+          </div>
+        </div>
         <div class="field">
           <label>Nota</label>
           <select id="entNota">
@@ -536,7 +543,14 @@
       </div>
       <div class="row2">
         <div class="field"><label>Produto</label><select id="pdProduto"><option value="">Todos os produtos</option></select></div>
-        <div class="field"><label>Mercado</label><select id="pdMercado"><option value="">Todos os mercados</option></select></div>
+        <div class="field">
+          <label>Mercado</label>
+          <div class="ac-combo">
+            <input type="text" id="pdMercadoBusca" placeholder="Todos os mercados" autocomplete="off">
+            <input type="hidden" id="pdMercado">
+            <div id="pdMercadoLista" class="ac-list"></div>
+          </div>
+        </div>
       </div>
       <div class="row2">
         <div class="field">
@@ -564,6 +578,33 @@
     </div>
     <div class="card">
       <div class="table-scroll"><table class="list cards" id="tabelaPerdas"></table></div>
+    </div>
+
+    <h2 class="sec" style="margin-top:26px;">Arrecadação</h2>
+    <p class="muted" style="margin-top:-8px;">Quantidade e valor efetivamente vendidos (já descontando as devoluções), usando os mesmos filtros de data/produto/mercado acima.</p>
+    <div class="card">
+      <div class="row2">
+        <div class="field">
+          <label>Gráfico agrupado por</label>
+          <select id="arAgrupar">
+            <option value="produto">Produto</option>
+            <option value="mercado">Mercado</option>
+          </select>
+        </div>
+        <div class="field">
+          <label>Métrica do gráfico</label>
+          <select id="arMetrica">
+            <option value="quantidade">Quantidade vendida</option>
+            <option value="valor" selected>Valor arrecadado (R$)</option>
+          </select>
+        </div>
+      </div>
+    </div>
+    <div class="card">
+      <canvas id="graficoArrecadado" height="120"></canvas>
+    </div>
+    <div class="card">
+      <div class="table-scroll"><table class="list cards" id="tabelaArrecadado"></table></div>
     </div>
   </section>
 
@@ -594,7 +635,14 @@
         <div class="field"><label>De</label><input type="date" id="rpDe"></div>
         <div class="field"><label>Até</label><input type="date" id="rpAte"></div>
       </div>
-      <div class="field"><label>Cliente</label><select id="rpCliente"></select></div>
+      <div class="field">
+        <label>Cliente</label>
+        <div class="ac-combo">
+          <input type="text" id="rpClienteBusca" placeholder="Todos os clientes" autocomplete="off">
+          <input type="hidden" id="rpCliente">
+          <div id="rpClienteLista" class="ac-list"></div>
+        </div>
+      </div>
       <div style="display:flex;gap:8px;flex-wrap:wrap;">
         <button class="btn btn-primary btn-small" id="btnGerarRelProdutos" type="button">Gerar relatório</button>
         <button class="btn btn-ghost btn-small" id="btnImprimirRelProdutos" type="button">Imprimir</button>
@@ -1128,34 +1176,23 @@ function atualizarBannerLembretes(){
 function clienteLabel(c){
   return (c.apelido || c.nome) + (c.bairro ? ' — ' + c.bairro : '');
 }
-function setNpCliente(id){
-  const hidden = document.getElementById('npCliente');
-  hidden.value = id;
+// Define o cliente selecionado num combo (hidden + campo de busca) e dispara 'change'.
+function selecionarCliente(hiddenId, buscaId, id){
+  const hidden = document.getElementById(hiddenId);
+  const buscaEl = document.getElementById(buscaId);
+  hidden.value = id || '';
+  if(buscaEl){
+    const c = id ? clientes.find(x=>x.id===id) : null;
+    buscaEl.value = c ? clienteLabel(c) : '';
+  }
   hidden.dispatchEvent(new Event('change'));
 }
-function npFecharLista(){
-  document.getElementById('npClienteLista').style.display = 'none';
-}
-function npAbrirLista(filtro){
-  const lista = document.getElementById('npClienteLista');
-  const termo = (filtro || '').trim().toLowerCase();
-  const filtrados = termo
-    ? clientes.filter(c => (c.apelido||'').toLowerCase().includes(termo) || (c.nome||'').toLowerCase().includes(termo))
-    : clientes;
-  if(filtrados.length===0){
-    lista.innerHTML = '<div class="ac-empty">Nenhum cliente encontrado.</div>';
-  } else {
-    lista.innerHTML = filtrados.map(c=>{
-      const div = document.createElement('div');
-      div.textContent = clienteLabel(c);
-      return `<div class="ac-item" data-id="${c.id}">${div.innerHTML}</div>`;
-    }).join('');
-  }
-  lista.style.display = 'block';
-}
-function renderClientesSelect(){
-  const buscaEl = document.getElementById('npClienteBusca');
-  const hidden = document.getElementById('npCliente');
+// Sincroniza o texto exibido no campo de busca com o valor atual do hidden
+// (usado depois que a lista de clientes é recarregada, p.ex. após editar um cliente).
+function sincronizarComboCliente(buscaId, hiddenId){
+  const hidden = document.getElementById(hiddenId);
+  const buscaEl = document.getElementById(buscaId);
+  if(!hidden || !buscaEl) return;
   const id = hidden.value;
   const c = id ? clientes.find(x=>x.id===id) : null;
   if(c){
@@ -1165,23 +1202,50 @@ function renderClientesSelect(){
     buscaEl.value = '';
   }
 }
-(function setupNpClienteAutocomplete(){
-  const buscaEl = document.getElementById('npClienteBusca');
-  const lista = document.getElementById('npClienteLista');
-  buscaEl.addEventListener('focus', ()=> npAbrirLista(buscaEl.value));
-  buscaEl.addEventListener('input', ()=> npAbrirLista(buscaEl.value));
-  buscaEl.addEventListener('blur', ()=> setTimeout(npFecharLista, 150));
+// Configura um combobox pesquisável de cliente: digita apelido/razão social e escolhe da lista.
+// opts.todosLabel, se definido, adiciona uma opção "Todos" no topo (usado nos filtros).
+function setupClienteCombo(buscaId, hiddenId, listaId, opts){
+  opts = opts || {};
+  const buscaEl = document.getElementById(buscaId);
+  const lista = document.getElementById(listaId);
+  if(!buscaEl || !lista) return;
+  function abrir(filtro){
+    const termo = (filtro || '').trim().toLowerCase();
+    const filtrados = termo
+      ? clientes.filter(c => (c.apelido||'').toLowerCase().includes(termo) || (c.nome||'').toLowerCase().includes(termo))
+      : clientes;
+    let html = opts.todosLabel ? `<div class="ac-item" data-id="">${opts.todosLabel}</div>` : '';
+    if(filtrados.length===0 && !opts.todosLabel){
+      html += '<div class="ac-empty">Nenhum cliente encontrado.</div>';
+    } else {
+      html += filtrados.map(c=>{
+        const div = document.createElement('div');
+        div.textContent = clienteLabel(c);
+        return `<div class="ac-item" data-id="${c.id}">${div.innerHTML}</div>`;
+      }).join('');
+    }
+    lista.innerHTML = html;
+    lista.style.display = 'block';
+  }
+  function fechar(){ lista.style.display = 'none'; }
+  buscaEl.addEventListener('focus', ()=> abrir(buscaEl.value));
+  buscaEl.addEventListener('input', ()=> abrir(buscaEl.value));
+  buscaEl.addEventListener('blur', ()=> setTimeout(fechar, 150));
   lista.addEventListener('mousedown', (e)=>{
     const item = e.target.closest('.ac-item');
     if(!item) return;
     e.preventDefault();
-    const id = item.dataset.id;
-    const c = clientes.find(x=>x.id===id);
-    if(c) buscaEl.value = clienteLabel(c);
-    setNpCliente(id);
-    npFecharLista();
+    selecionarCliente(hiddenId, buscaId, item.dataset.id);
+    fechar();
   });
-})();
+}
+function renderClientesSelect(){
+  sincronizarComboCliente('npClienteBusca', 'npCliente');
+}
+setupClienteCombo('npClienteBusca', 'npCliente', 'npClienteLista', {});
+setupClienteCombo('entMercadoBusca', 'entMercado', 'entMercadoLista', {todosLabel:'Todos os mercados'});
+setupClienteCombo('pdMercadoBusca', 'pdMercado', 'pdMercadoLista', {todosLabel:'Todos os mercados'});
+setupClienteCombo('rpClienteBusca', 'rpCliente', 'rpClienteLista', {todosLabel:'Todos os clientes'});
 function renderClientesTable(){
   const t = document.getElementById('tabelaClientes');
   const buscaEl = document.getElementById('clBusca');
@@ -1459,9 +1523,7 @@ function iniciarEdicaoPedido(id){
   const p = pedidos.find(x=>x.id===id);
   if(!p) return;
   editingPedidoId = id;
-  setNpCliente(p.clienteId);
-  const cSel = clientes.find(x=>x.id===p.clienteId);
-  document.getElementById('npClienteBusca').value = cSel ? clienteLabel(cSel) : '';
+  selecionarCliente('npCliente', 'npClienteBusca', p.clienteId);
   document.getElementById('npData').value = p.data;
   clearNpGrid();
   document.getElementById('npItens').innerHTML = '';
@@ -1565,12 +1627,7 @@ function fmtData(d){
 }
 
 function populateEntreguesFiltro(){
-  const sel = document.getElementById('entMercado');
-  if(!sel) return;
-  const cur = sel.value;
-  sel.innerHTML = '<option value="">Todos os mercados</option>' +
-    clientes.map(c=>`<option value="${c.id}">${c.apelido || c.nome}</option>`).join('');
-  if(cur) sel.value = cur;
+  sincronizarComboCliente('entMercadoBusca', 'entMercado');
 }
 
 function renderPedidos(){
@@ -1604,6 +1661,7 @@ function renderPedidos(){
   attachTicketListeners();
   renderRelatorio();
   renderPerdas();
+  renderArrecadado();
   populateRpFiltros();
   if(document.getElementById('previewRelProdutosCard') && document.getElementById('previewRelProdutosCard').style.display !== 'none'){
     renderRelProdutos();
@@ -1990,12 +2048,7 @@ function renderRelatorio(){
 }
 // RELATÓRIO DE VENDAS POR PRODUTOS — agrupado por cliente > produto, formato "talão"
 function populateRpFiltros(){
-  const sel = document.getElementById('rpCliente');
-  if(!sel) return;
-  const cur = sel.value;
-  sel.innerHTML = '<option value="">Todos os clientes</option>' +
-    clientes.map(c=>`<option value="${c.id}">${c.apelido || c.nome}</option>`).join('');
-  if(cur) sel.value = cur;
+  sincronizarComboCliente('rpClienteBusca', 'rpCliente');
 }
 
 // Retorna: [{ clienteId, clienteNome, produtos:[{codigo, descricao, qtd, unit, vlrVen, desconto, liquido}], totalLiquido }]
@@ -2091,6 +2144,7 @@ document.getElementById('btnLimparRelProdutos').addEventListener('click', ()=>{
   document.getElementById('rpDe').value = '';
   document.getElementById('rpAte').value = '';
   document.getElementById('rpCliente').value = '';
+  document.getElementById('rpClienteBusca').value = '';
   document.getElementById('previewRelProdutosCard').style.display = 'none';
   document.getElementById('previewRelProdutos').innerHTML = '';
 });
@@ -2109,6 +2163,7 @@ document.getElementById('btnImprimirRelProdutos').addEventListener('click', ()=>
 
 // PERDAS — filtro por produto e mercado, com gráfico e tabela
 let chartPerdas = null;
+let chartArrecadado = null;
 
 function populatePerdasFiltros(){
   const selProd = document.getElementById('pdProduto');
@@ -2117,11 +2172,7 @@ function populatePerdasFiltros(){
     produtos.map(p=>`<option value="${p.codigo}">${p.descricao}</option>`).join('');
   if(curProd) selProd.value = curProd;
 
-  const selMerc = document.getElementById('pdMercado');
-  const curMerc = selMerc.value;
-  selMerc.innerHTML = '<option value="">Todos os mercados</option>' +
-    clientes.map(c=>`<option value="${c.id}">${c.apelido || c.nome}</option>`).join('');
-  if(curMerc) selMerc.value = curMerc;
+  sincronizarComboCliente('pdMercadoBusca', 'pdMercado');
 }
 
 function coletarPerdas(){
@@ -2210,24 +2261,120 @@ function renderPerdas(){
     linhas +
     `<tr style="border-top:2px solid var(--forest);"><td data-label="Total" colspan="3"><b>Total</b></td><td data-label="Qtd. perdida"><b>${totQtd}</b></td><td data-label="Valor perdido"><b>R$ ${totValor.toFixed(2)}</b></td></tr>`;
 }
-document.getElementById('btnFiltrarPerdas').addEventListener('click', renderPerdas);
+document.getElementById('btnFiltrarPerdas').addEventListener('click', ()=>{ renderPerdas(); renderArrecadado(); });
 document.getElementById('btnLimparPerdas').addEventListener('click', ()=>{
   document.getElementById('pdDe').value = '';
   document.getElementById('pdAte').value = '';
   document.getElementById('pdProduto').value = '';
   document.getElementById('pdMercado').value = '';
+  document.getElementById('pdMercadoBusca').value = '';
   document.getElementById('pdAgrupar').value = 'produto';
   document.getElementById('pdMetrica').value = 'quantidade';
+  document.getElementById('arAgrupar').value = 'produto';
+  document.getElementById('arMetrica').value = 'valor';
   renderPerdas();
+  renderArrecadado();
 });
 document.getElementById('pdAgrupar').addEventListener('change', renderPerdas);
 document.getElementById('pdMetrica').addEventListener('change', renderPerdas);
+
+// ARRECADAÇÃO — mesma base de filtros (data/produto/mercado) das perdas, mas
+// somando o que foi efetivamente vendido/recebido (quantidade entregue menos devolução).
+function coletarArrecadado(){
+  const de = document.getElementById('pdDe').value;
+  const ate = document.getElementById('pdAte').value;
+  const filtroProduto = document.getElementById('pdProduto').value;
+  const filtroMercado = document.getElementById('pdMercado').value;
+
+  const registros = [];
+  pedidos
+    .filter(p=> p.status==='entregue' && (!de || p.dataEntrega>=de) && (!ate || p.dataEntrega<=ate))
+    .forEach(p=>{
+      const dev = p.devolucoes || {};
+      p.itens.forEach(it=>{
+        if(filtroProduto && it.codigo!==filtroProduto) return;
+        if(filtroMercado && p.clienteId!==filtroMercado) return;
+        const perdido = dev[it.codigo] || 0;
+        const qtdLiquida = it.quantidade - perdido;
+        if(qtdLiquida<=0) return;
+        const info = produtoInfo(it.codigo);
+        registros.push({
+          data: p.dataEntrega,
+          clienteId: p.clienteId,
+          clienteNome: clienteNome(p.clienteId),
+          produtoDescricao: info.descricao,
+          quantidade: qtdLiquida,
+          valor: qtdLiquida * getPreco(p.clienteId, it.codigo)
+        });
+      });
+    });
+  return registros;
+}
+
+function renderArrecadado(){
+  if(!document.getElementById('panel-perdas')) return;
+  const registros = coletarArrecadado();
+  const agrupar = document.getElementById('arAgrupar').value;
+  const metrica = document.getElementById('arMetrica').value;
+
+  const grupos = {};
+  registros.forEach(r=>{
+    const chave = agrupar==='produto' ? r.produtoDescricao : r.clienteNome;
+    if(!grupos[chave]) grupos[chave] = {quantidade:0, valor:0};
+    grupos[chave].quantidade += r.quantidade;
+    grupos[chave].valor += r.valor;
+  });
+  const labels = Object.keys(grupos).sort((a,b)=> grupos[b][metrica]-grupos[a][metrica]);
+  const dados = labels.map(l=> grupos[l][metrica]);
+
+  const canvas = document.getElementById('graficoArrecadado');
+  if(canvas && window.Chart){
+    const ctx = canvas.getContext('2d');
+    if(chartArrecadado) chartArrecadado.destroy();
+    chartArrecadado = new Chart(ctx, {
+      type: 'bar',
+      data: {
+        labels,
+        datasets: [{
+          label: metrica==='quantidade' ? 'Quantidade vendida' : 'Valor arrecadado (R$)',
+          data: dados,
+          backgroundColor: '#1F3D2B',
+          borderRadius: 5,
+        }]
+      },
+      options: {
+        responsive: true,
+        plugins:{ legend:{ display:false } },
+        scales:{ y:{ beginAtZero:true } }
+      }
+    });
+  }
+
+  const tabela = document.getElementById('tabelaArrecadado');
+  if(!tabela) return;
+  if(registros.length===0){
+    tabela.innerHTML = '<tr><td class="empty">Nenhuma arrecadação registrada no período/filtro selecionado.</td></tr>';
+    return;
+  }
+  const ordenados = [...registros].sort((a,b)=> b.data.localeCompare(a.data));
+  let totQtd=0, totValor=0;
+  const linhas = ordenados.map(r=>{
+    totQtd += r.quantidade; totValor += r.valor;
+    return `<tr><td data-label="Data">${fmtData(r.data)}</td><td data-label="Mercado">${r.clienteNome}</td><td data-label="Produto">${r.produtoDescricao}</td><td data-label="Qtd. vendida">${r.quantidade}</td><td data-label="Valor arrecadado">R$ ${r.valor.toFixed(2)}</td></tr>`;
+  }).join('');
+  tabela.innerHTML = `<tr><th>Data</th><th>Mercado</th><th>Produto</th><th>Qtd. vendida</th><th>Valor arrecadado</th></tr>` +
+    linhas +
+    `<tr style="border-top:2px solid var(--forest);"><td data-label="Total" colspan="3"><b>Total</b></td><td data-label="Qtd. vendida"><b>${totQtd}</b></td><td data-label="Valor arrecadado"><b>R$ ${totValor.toFixed(2)}</b></td></tr>`;
+}
+document.getElementById('arAgrupar').addEventListener('change', renderArrecadado);
+document.getElementById('arMetrica').addEventListener('change', renderArrecadado);
 
 document.getElementById('btnFiltrarEntregues').addEventListener('click', renderPedidos);
 document.getElementById('btnLimparEntregues').addEventListener('click', ()=>{
   document.getElementById('entDe').value = '';
   document.getElementById('entAte').value = '';
   document.getElementById('entMercado').value = '';
+  document.getElementById('entMercadoBusca').value = '';
   document.getElementById('entNota').value = '';
   renderPedidos();
 });

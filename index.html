@@ -71,6 +71,15 @@
   }
   select:focus, input:focus{outline:2px solid var(--leaf);outline-offset:1px;border-color:var(--leaf);}
   .field{margin-bottom:12px;}
+  .ac-combo{position:relative;}
+  .ac-list{
+    position:absolute;top:calc(100% + 4px);left:0;right:0;z-index:50;
+    background:#fff;border:1.5px solid var(--line);border-radius:8px;box-shadow:var(--shadow);
+    max-height:240px;overflow-y:auto;display:none;
+  }
+  .ac-item{padding:9px 12px;font-size:14.5px;cursor:pointer;}
+  .ac-item:hover, .ac-item.active{background:var(--forest);color:#fff;}
+  .ac-empty{padding:9px 12px;font-size:13.5px;color:var(--ink-soft);}
   .row2{display:grid;grid-template-columns:1fr 1fr;gap:12px;}
   .row-item{
     display:grid;grid-template-columns:1fr 90px 34px;gap:8px;align-items:end;margin-bottom:10px;
@@ -409,7 +418,11 @@
       <div class="row2">
         <div class="field">
           <label>Cliente / mercado</label>
-          <select id="npCliente"></select>
+          <div class="ac-combo">
+            <input type="text" id="npClienteBusca" placeholder="Digite o apelido ou razão social..." autocomplete="off">
+            <input type="hidden" id="npCliente">
+            <div id="npClienteLista" class="ac-list"></div>
+          </div>
         </div>
         <div class="field">
           <label>Data do pedido</label>
@@ -1092,10 +1105,63 @@ function atualizarBannerLembretes(){
 }
 
 // CLIENTES
-function renderClientesSelect(){
-  const sel = document.getElementById('npCliente');
-  sel.innerHTML = clientes.map(c=>`<option value="${c.id}">${c.apelido || c.nome} — ${c.bairro}</option>`).join('');
+function clienteLabel(c){
+  return (c.apelido || c.nome) + (c.bairro ? ' — ' + c.bairro : '');
 }
+function setNpCliente(id){
+  const hidden = document.getElementById('npCliente');
+  hidden.value = id;
+  hidden.dispatchEvent(new Event('change'));
+}
+function npFecharLista(){
+  document.getElementById('npClienteLista').style.display = 'none';
+}
+function npAbrirLista(filtro){
+  const lista = document.getElementById('npClienteLista');
+  const termo = (filtro || '').trim().toLowerCase();
+  const filtrados = termo
+    ? clientes.filter(c => (c.apelido||'').toLowerCase().includes(termo) || (c.nome||'').toLowerCase().includes(termo))
+    : clientes;
+  if(filtrados.length===0){
+    lista.innerHTML = '<div class="ac-empty">Nenhum cliente encontrado.</div>';
+  } else {
+    lista.innerHTML = filtrados.map(c=>{
+      const div = document.createElement('div');
+      div.textContent = clienteLabel(c);
+      return `<div class="ac-item" data-id="${c.id}">${div.innerHTML}</div>`;
+    }).join('');
+  }
+  lista.style.display = 'block';
+}
+function renderClientesSelect(){
+  const buscaEl = document.getElementById('npClienteBusca');
+  const hidden = document.getElementById('npCliente');
+  const id = hidden.value;
+  const c = id ? clientes.find(x=>x.id===id) : null;
+  if(c){
+    buscaEl.value = clienteLabel(c);
+  } else if(id){
+    hidden.value = '';
+    buscaEl.value = '';
+  }
+}
+(function setupNpClienteAutocomplete(){
+  const buscaEl = document.getElementById('npClienteBusca');
+  const lista = document.getElementById('npClienteLista');
+  buscaEl.addEventListener('focus', ()=> npAbrirLista(buscaEl.value));
+  buscaEl.addEventListener('input', ()=> npAbrirLista(buscaEl.value));
+  buscaEl.addEventListener('blur', ()=> setTimeout(npFecharLista, 150));
+  lista.addEventListener('mousedown', (e)=>{
+    const item = e.target.closest('.ac-item');
+    if(!item) return;
+    e.preventDefault();
+    const id = item.dataset.id;
+    const c = clientes.find(x=>x.id===id);
+    if(c) buscaEl.value = clienteLabel(c);
+    setNpCliente(id);
+    npFecharLista();
+  });
+})();
 function renderClientesTable(){
   const t = document.getElementById('tabelaClientes');
   const buscaEl = document.getElementById('clBusca');
@@ -1373,7 +1439,9 @@ function iniciarEdicaoPedido(id){
   const p = pedidos.find(x=>x.id===id);
   if(!p) return;
   editingPedidoId = id;
-  document.getElementById('npCliente').value = p.clienteId;
+  setNpCliente(p.clienteId);
+  const cSel = clientes.find(x=>x.id===p.clienteId);
+  document.getElementById('npClienteBusca').value = cSel ? clienteLabel(cSel) : '';
   document.getElementById('npData').value = p.data;
   clearNpGrid();
   document.getElementById('npItens').innerHTML = '';
@@ -1441,7 +1509,6 @@ document.getElementById('btnSalvarPedido').addEventListener('click', async ()=>{
   clearNpGrid();
   document.getElementById('npItens').innerHTML='';
   renderPedidos();
-  document.querySelector('nav.tabs button[data-tab="pedidos"]').click();
   showToast('Pedido lançado.');
 });
 

@@ -224,6 +224,19 @@
   .comprovante-tabela td{padding:4px 2px;border-bottom:1px dashed var(--line);}
   .comprovante-total{font-weight:700;margin-top:8px;text-align:right;}
   .comprovante-ass{margin-top:28px;border-top:1px solid var(--ink);padding-top:4px;font-size:11px;}
+
+  /* Usada só um instante, escondida fora da tela, pra medir a altura real do
+     comprovante com o MESMO tamanho de fonte usado na impressão (@media print).
+     Isso permite calcular a altura exata da página e evitar sobra de papel em branco. */
+  #printOutput.medindo{
+    display:block; position:fixed; left:-9999px; top:0;
+    width:80mm; padding:0 4mm; box-sizing:border-box;
+  }
+  #printOutput.medindo .comprovante{ font-size:9px; }
+  #printOutput.medindo .comprovante-emit{ font-size:11px; }
+  #printOutput.medindo .comprovante-tabela th,
+  #printOutput.medindo .comprovante-tabela td{ padding:3px 1px; }
+  #printOutput.medindo .resumo-line{ font-size:8.5px; }
   #resumoTexto{width:100%;min-height:220px;font-family:'IBM Plex Mono',monospace;font-size:12px;
     border:1.5px solid var(--line);border-radius:8px;padding:12px;background:#fff;}
 
@@ -329,17 +342,17 @@
     }
 
     .comprovante{
-      font-size: 11px; /* Diminuímos meio ponto pra ajudar a caber as colunas de preço */
+      font-size: 9px; /* Reduzido para deixar a impressão mais compacta */
       word-break: break-word; /* Evita que palavras longas empurrem a tabela pra fora */
       color: #000;
       font-weight: 600;
     }
 
-    .comprovante-emit{ color:#000; font-weight:800; }
+    .comprovante-emit{ font-size: 11px; color:#000; font-weight:800; }
     .comprovante-titulo{ color:#000; border-color:#000; }
 
     .comprovante-tabela th, .comprovante-tabela td {
-      padding: 4px 1px; /* Reduz um pouquinho o espaçamento interno da tabela */
+      padding: 3px 1px; /* Reduz um pouquinho o espaçamento interno da tabela */
       color: #000;
       border-bottom-color: #000;
     }
@@ -348,9 +361,10 @@
     .comprovante-total{ color:#000; font-weight:800; }
     .comprovante-ass{ border-color:#000; }
 
-    .resumo-line{font-size:10.5px; color:#000; font-weight:600;}
+    .resumo-line{font-size:8.5px; color:#000; font-weight:600;}
   }
 </style>
+<style id="printPageSize">@page{ size: 80mm auto; margin: 0; }</style>
 </head>
 <body>
 
@@ -1938,12 +1952,31 @@ document.getElementById('btnCopiar').addEventListener('click', async ()=>{
     showToast('Selecione e copie manualmente (Ctrl+C).');
   }
 });
+// Mede a altura real do que vai ser impresso (com o mesmo tamanho de fonte
+// usado no @media print) e ajusta o @page pra esse tamanho exato, em vez de
+// deixar "auto" — isso evita que a impressora térmica puxe papel em branco
+// além do necessário.
+function medirAlturaMM(){
+  const el = document.getElementById('printOutput');
+  el.classList.add('medindo');
+  const alturaPx = el.scrollHeight;
+  el.classList.remove('medindo');
+  const mm = (alturaPx / 96) * 25.4; // conversão px -> mm (96dpi)
+  return Math.ceil(mm) + 4; // pequena margem de segurança pra não cortar conteúdo
+}
+function ajustarAlturaPagina(){
+  const mm = medirAlturaMM();
+  document.getElementById('printPageSize').textContent =
+    '@page{ size: 80mm ' + mm + 'mm; margin: 0; }';
+}
+
 let imprimindo = false;
 document.getElementById('btnImprimir').addEventListener('click', ()=>{
   if(imprimindo) return;
   imprimindo = true;
   document.getElementById('printOutput').innerHTML =
     '<pre class="resumo-line" style="margin:0;">' + document.getElementById('printFicha').textContent + '</pre>';
+  ajustarAlturaPagina();
   window.print();
   setTimeout(()=>{ imprimindo = false; }, 500);
 });
@@ -1951,6 +1984,7 @@ document.getElementById('btnImprimirComprovante').addEventListener('click', ()=>
   if(imprimindo) return;
   imprimindo = true;
   document.getElementById('printOutput').innerHTML = document.getElementById('printComprovante').innerHTML;
+  ajustarAlturaPagina();
   window.print();
   setTimeout(()=>{ imprimindo = false; }, 500);
 });
@@ -2157,6 +2191,7 @@ document.getElementById('btnImprimirRelProdutos').addEventListener('click', ()=>
   if(grupos.length===0){ showToast('Nada pra imprimir nesse período/filtro.'); return; }
   imprimindo = true;
   document.getElementById('printOutput').innerHTML = gerarRelProdutosHTML(grupos, de, ate);
+  ajustarAlturaPagina();
   window.print();
   setTimeout(()=>{ imprimindo = false; }, 500);
 });

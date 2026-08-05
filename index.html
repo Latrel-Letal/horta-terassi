@@ -151,8 +151,10 @@
     display:flex;justify-content:space-between;align-items:flex-start;gap:10px;padding:6px 0;font-size:14px;
     border-bottom:1px dashed var(--line);
   }
-  ul.itens li .qtd{font-family:'IBM Plex Mono',monospace;color:var(--ink-soft);text-align:right;line-height:1.5;}
-  ul.itens li .qtd .preco{display:block;font-size:12px;color:var(--ink-soft);opacity:.85;}
+  ul.itens li .nome{line-height:1.5;}
+  ul.itens li .nome .preco{display:block;font-size:12px;color:var(--ink-soft);opacity:.85;}
+  ul.itens li .qtd{font-family:'IBM Plex Mono',monospace;color:var(--ink-soft);text-align:right;line-height:1.5;white-space:nowrap;}
+  ul.itens li .qtd .subtotal{display:block;font-size:12px;color:var(--ink-soft);opacity:.85;}
   .ticket-total{display:flex;justify-content:space-between;font-weight:700;margin-top:6px;font-size:14.5px;}
   .ticket-actions{display:flex;gap:8px;margin-top:12px;flex-wrap:wrap;}
   .stamp{
@@ -1629,7 +1631,7 @@ function ticketHTML(p){
     const info = produtoInfo(it.codigo);
     const preco = getPreco(p.clienteId, it.codigo);
     const subtotal = preco * it.quantidade;
-    return `<li><span>${info.descricao}</span><span class="qtd">${it.quantidade} ${info.unidade}<span class="preco">R$ ${preco.toFixed(2)} un. · R$ ${subtotal.toFixed(2)}</span></span></li>`;
+    return `<li><span class="nome">${info.descricao}<span class="preco">R$ ${preco.toFixed(2)} un.</span></span><span class="qtd">${it.quantidade} ${info.unidade}<span class="subtotal">R$ ${subtotal.toFixed(2)}</span></span></li>`;
   }).join('');
   const devObj = p.devolucoes || {};
   const itensPerdaHtml = p.itens.map(it=>{

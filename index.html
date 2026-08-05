@@ -302,6 +302,12 @@
   @media print{
     body > *:not(#printOutput){display:none !important;}
 
+    html, body, #printOutput{
+      -webkit-print-color-adjust: exact;
+      print-color-adjust: exact;
+      color-adjust: exact;
+    }
+
     #printOutput{
       display:block !important;
       width: 100%;
@@ -325,13 +331,24 @@
     .comprovante{
       font-size: 11px; /* Diminuímos meio ponto pra ajudar a caber as colunas de preço */
       word-break: break-word; /* Evita que palavras longas empurrem a tabela pra fora */
+      color: #000;
+      font-weight: 600;
     }
+
+    .comprovante-emit{ color:#000; font-weight:800; }
+    .comprovante-titulo{ color:#000; border-color:#000; }
 
     .comprovante-tabela th, .comprovante-tabela td {
       padding: 4px 1px; /* Reduz um pouquinho o espaçamento interno da tabela */
+      color: #000;
+      border-bottom-color: #000;
     }
+    .comprovante-tabela th{ font-weight:800; border-bottom-width:1.5px; }
 
-    .resumo-line{font-size:10.5px;}
+    .comprovante-total{ color:#000; font-weight:800; }
+    .comprovante-ass{ border-color:#000; }
+
+    .resumo-line{font-size:10.5px; color:#000; font-weight:600;}
   }
 </style>
 </head>

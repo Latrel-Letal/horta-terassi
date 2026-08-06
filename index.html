@@ -222,6 +222,7 @@
   .comprovante-tabela{width:100%;border-collapse:collapse;margin:10px 0;}
   .comprovante-tabela th{text-align:left;border-bottom:1px solid var(--ink);padding:4px 2px;font-size:11px;text-transform:uppercase;}
   .comprovante-tabela td{padding:4px 2px;border-bottom:1px dashed var(--line);}
+  .comprovante-tabela td .preco-unit{display:block;font-size:10px;color:var(--ink-soft);opacity:.85;font-weight:400;}
   .comprovante-total{font-weight:700;margin-top:8px;text-align:right;}
   .comprovante-ass{margin-top:28px;border-top:1px solid var(--ink);padding-top:4px;font-size:11px;}
 
@@ -359,6 +360,7 @@
       border-bottom-color: #000;
     }
     .comprovante-tabela th{ font-weight:800; border-bottom-width:1.5px; }
+    .comprovante-tabela td .preco-unit{ color:#000; font-weight:600; opacity:1; }
     table{ width:100% !important; }
 
     .comprovante-total{ color:#000; font-weight:800; }
@@ -1872,7 +1874,7 @@ function gerarComprovanteHTML(p, c, total){
     const vtotal = valorAplicado * it.quantidade;
     const codigo = info.codigo ? `${info.codigo} ` : '';
     return `<tr>
-      <td>${codigo}${info.descricao}</td>
+      <td>${codigo}${info.descricao}<span class="preco-unit">R$ ${valorAplicado.toFixed(2)} un.</span></td>
       <td style="text-align:right;">${it.quantidade}</td>
       <td style="text-align:right;">R$ ${vtotal.toFixed(2)}</td>
     </tr>`;

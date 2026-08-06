@@ -230,9 +230,9 @@
      Isso permite calcular a altura exata da página e evitar sobra de papel em branco. */
   #printOutput.medindo{
     display:block; position:fixed; left:-9999px; top:0;
-    width:58mm; padding:0 2mm; box-sizing:border-box;
+    width:78mm; padding:0 1mm; box-sizing:border-box;
   }
-  #printOutput.medindo .comprovante{ font-size:8px; }
+  #printOutput.medindo .comprovante{ font-size:14px; font-family:monospace; }
   #printOutput.medindo .comprovante-emit{ font-size:11px; }
   #printOutput.medindo .comprovante-tabela th,
   #printOutput.medindo .comprovante-tabela td{ padding:3px 1px; }
@@ -323,16 +323,15 @@
 
     #printOutput{
       display:block !important;
-      width: 100%;
-      max-width: 58mm; /* Teste: largura de 58mm em vez de 80mm */
-      margin: 0;
-      /* Reduzido de 4mm para 2mm de margem interna nas laterais */
-      padding: 0 2mm;
-      box-sizing: border-box;
+      width: 100% !important;
+      max-width: 78mm !important; /* 78mm dá uma margem minúscula de segurança para não cortar letras */
+      margin: 0 !important;
+      padding: 0 1mm !important;
+      box-sizing: border-box !important;
     }
 
     @page{
-      size: 58mm auto;
+      size: 80mm auto;
       margin: 0; /* Zeramos a margem da página para o padding acima fazer o trabalho */
     }
 
@@ -343,10 +342,12 @@
     }
 
     .comprovante{
-      font-size: 8px; /* Reduzido para caber na largura de 58mm */
+      width: 100% !important;
+      font-size: 14px !important; /* Aumentado para o tamanho pedido */
       word-break: break-word; /* Evita que palavras longas empurrem a tabela pra fora */
       color: #000;
       font-weight: 600;
+      font-family: monospace; /* ajuda a alinhar os valores da tabela */
     }
 
     .comprovante-emit{ font-size: 11px; color:#000; font-weight:800; }
@@ -358,6 +359,7 @@
       border-bottom-color: #000;
     }
     .comprovante-tabela th{ font-weight:800; border-bottom-width:1.5px; }
+    table{ width:100% !important; }
 
     .comprovante-total{ color:#000; font-weight:800; }
     .comprovante-ass{ border-color:#000; }
@@ -365,7 +367,7 @@
     .resumo-line{font-size:8.5px; color:#000; font-weight:600;}
   }
 </style>
-<style id="printPageSize">@page{ size: 58mm auto; margin: 0; }</style>
+<style id="printPageSize">@page{ size: 80mm auto; margin: 0; }</style>
 </head>
 <body>
 
@@ -1968,7 +1970,7 @@ function medirAlturaMM(){
 function ajustarAlturaPagina(){
   const mm = medirAlturaMM();
   document.getElementById('printPageSize').textContent =
-    '@page{ size: 58mm ' + mm + 'mm; margin: 0; }';
+    '@page{ size: 80mm ' + mm + 'mm; margin: 0; }';
 }
 
 let imprimindo = false;

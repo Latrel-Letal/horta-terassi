@@ -230,9 +230,9 @@
      Isso permite calcular a altura exata da página e evitar sobra de papel em branco. */
   #printOutput.medindo{
     display:block; position:fixed; left:-9999px; top:0;
-    width:80mm; padding:0 4mm; box-sizing:border-box;
+    width:58mm; padding:0 2mm; box-sizing:border-box;
   }
-  #printOutput.medindo .comprovante{ font-size:9px; }
+  #printOutput.medindo .comprovante{ font-size:8px; }
   #printOutput.medindo .comprovante-emit{ font-size:11px; }
   #printOutput.medindo .comprovante-tabela th,
   #printOutput.medindo .comprovante-tabela td{ padding:3px 1px; }
@@ -324,14 +324,15 @@
     #printOutput{
       display:block !important;
       width: 100%;
+      max-width: 58mm; /* Teste: largura de 58mm em vez de 80mm */
       margin: 0;
-      /* Adiciona 4 milímetros de margem interna nas laterais para não cortar o texto */
-      padding: 0 4mm;
+      /* Reduzido de 4mm para 2mm de margem interna nas laterais */
+      padding: 0 2mm;
       box-sizing: border-box;
     }
 
     @page{
-      size: 80mm auto;
+      size: 58mm auto;
       margin: 0; /* Zeramos a margem da página para o padding acima fazer o trabalho */
     }
 
@@ -342,7 +343,7 @@
     }
 
     .comprovante{
-      font-size: 9px; /* Reduzido para deixar a impressão mais compacta */
+      font-size: 8px; /* Reduzido para caber na largura de 58mm */
       word-break: break-word; /* Evita que palavras longas empurrem a tabela pra fora */
       color: #000;
       font-weight: 600;
@@ -364,7 +365,7 @@
     .resumo-line{font-size:8.5px; color:#000; font-weight:600;}
   }
 </style>
-<style id="printPageSize">@page{ size: 80mm auto; margin: 0; }</style>
+<style id="printPageSize">@page{ size: 58mm auto; margin: 0; }</style>
 </head>
 <body>
 
@@ -1967,7 +1968,7 @@ function medirAlturaMM(){
 function ajustarAlturaPagina(){
   const mm = medirAlturaMM();
   document.getElementById('printPageSize').textContent =
-    '@page{ size: 80mm ' + mm + 'mm; margin: 0; }';
+    '@page{ size: 58mm ' + mm + 'mm; margin: 0; }';
 }
 
 let imprimindo = false;

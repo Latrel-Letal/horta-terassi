@@ -599,11 +599,25 @@
     </div>
     <div class="row2">
       <div class="card">
-        <h3 style="margin-top:0;">Entregas por mercado</h3>
+        <h3 style="margin-top:0;display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;">
+          <span>Entregas por mercado</span>
+          <select id="entregMercadoOrdem" style="width:auto;padding:6px 8px;font-size:12px;">
+            <option value="desc">Maior → menor</option>
+            <option value="asc">Menor → maior</option>
+            <option value="alfa">Ordem alfabética</option>
+          </select>
+        </h3>
         <div class="table-scroll"><table class="list cards" id="tabelaEntregasMercado"></table></div>
       </div>
       <div class="card">
-        <h3 style="margin-top:0;">Entregas por entregador</h3>
+        <h3 style="margin-top:0;display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;">
+          <span>Entregas por entregador</span>
+          <select id="entregFuncionarioOrdem" style="width:auto;padding:6px 8px;font-size:12px;">
+            <option value="desc">Maior → menor</option>
+            <option value="asc">Menor → maior</option>
+            <option value="alfa">Ordem alfabética</option>
+          </select>
+        </h3>
         <div class="table-scroll"><table class="list cards" id="tabelaEntregasFuncionario"></table></div>
       </div>
     </div>
@@ -1639,7 +1653,15 @@ function renderRelEntregadores(){
   const porMercado = {};
   entregues.forEach(p=>{ porMercado[p.clienteId] = (porMercado[p.clienteId]||0) + 1; });
 
-  const idsMercado = Object.keys(porMercado).sort((a,b)=> clienteNome(a).localeCompare(clienteNome(b)));
+  const ordemMercado = document.getElementById('entregMercadoOrdem') ? document.getElementById('entregMercadoOrdem').value : 'desc';
+  let idsMercado = Object.keys(porMercado);
+  if(ordemMercado==='alfa'){
+    idsMercado.sort((a,b)=> clienteNome(a).localeCompare(clienteNome(b)));
+  } else if(ordemMercado==='asc'){
+    idsMercado.sort((a,b)=> porMercado[a]-porMercado[b] || clienteNome(a).localeCompare(clienteNome(b)));
+  } else {
+    idsMercado.sort((a,b)=> porMercado[b]-porMercado[a] || clienteNome(a).localeCompare(clienteNome(b)));
+  }
   if(idsMercado.length===0){
     tabMercado.innerHTML = '<tr><td class="empty">Nenhum pedido entregue no período/filtro.</td></tr>';
   } else {
@@ -1657,13 +1679,23 @@ function renderRelEntregadores(){
     tabFunc.innerHTML = '<tr><td class="empty">Nenhum entregador encontrado pra esse filtro.</td></tr>';
     return;
   }
-  const linhasFunc = funcionariosParaExibir.map(f=>{
+  const ordemFunc = document.getElementById('entregFuncionarioOrdem') ? document.getElementById('entregFuncionarioOrdem').value : 'desc';
+  let linhasFunc = funcionariosParaExibir.map(f=>{
     const total = (f.clientesIds||[]).reduce((s,cid)=> s + (porMercado[cid]||0), 0);
     return {nome: f.nome, total};
-  }).sort((a,b)=> b.total - a.total);
+  });
+  if(ordemFunc==='alfa'){
+    linhasFunc.sort((a,b)=> a.nome.localeCompare(b.nome));
+  } else if(ordemFunc==='asc'){
+    linhasFunc.sort((a,b)=> a.total-b.total || a.nome.localeCompare(b.nome));
+  } else {
+    linhasFunc.sort((a,b)=> b.total-a.total || a.nome.localeCompare(b.nome));
+  }
   tabFunc.innerHTML = `<tr><th>Entregador</th><th>Entregas</th></tr>` +
     linhasFunc.map(l=>`<tr><td data-label="Entregador">${l.nome}</td><td data-label="Entregas">${l.total}</td></tr>`).join('');
 }
+document.getElementById('entregMercadoOrdem').addEventListener('change', renderRelEntregadores);
+document.getElementById('entregFuncionarioOrdem').addEventListener('change', renderRelEntregadores);
 document.getElementById('btnFiltrarEntregadores').addEventListener('click', renderRelEntregadores);
 document.getElementById('btnLimparEntregadores').addEventListener('click', ()=>{
   document.getElementById('entregDe').value=''; document.getElementById('entregAte').value='';

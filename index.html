@@ -411,6 +411,7 @@
     <button data-tab="novo">Novo pedido</button>
     <button data-tab="clientes">Clientes</button>
     <button data-tab="produtos">Produtos</button>
+    <button data-tab="entregadores">Entregadores</button>
     <button data-tab="perdas">Perdas</button>
     <button data-tab="relatorio">Relatório</button>
     <button data-tab="relprodutos">Rel. Produtos</button>
@@ -549,6 +550,47 @@
       </div>
       <button class="btn btn-primary" id="btnSalvarProduto" type="button">Salvar produto</button>
       <button class="btn btn-ghost" id="btnCancelarEdicaoProduto" type="button" style="display:none;margin-left:8px;">Cancelar edição</button>
+    </div>
+  </section>
+
+  <section class="panel" id="panel-entregadores">
+    <h2 class="sec">Funcionários / entregadores</h2>
+    <p class="muted" style="margin-top:-6px;">Cadastre quem faz as entregas e marque pra quais mercados cada um entrega.</p>
+    <div class="card">
+      <div class="table-scroll"><table class="list cards" id="tabelaFuncionarios"></table></div>
+    </div>
+    <h2 class="sec">Adicionar funcionário</h2>
+    <div class="card">
+      <div class="field"><label>Nome</label><input type="text" id="fnNome" placeholder="Ex: João"></div>
+      <div class="field">
+        <label>Mercados que entrega</label>
+        <div id="fnMercadosChecklist" style="display:flex;flex-direction:column;gap:6px;max-height:220px;overflow:auto;border:1px solid var(--line);border-radius:8px;padding:10px;"></div>
+      </div>
+      <button class="btn btn-primary" id="btnSalvarFuncionario" type="button">Salvar funcionário</button>
+      <button class="btn btn-ghost" id="btnCancelarEdicaoFuncionario" type="button" style="display:none;margin-left:8px;">Cancelar edição</button>
+    </div>
+
+    <h2 class="sec" style="margin-top:26px;">Entregas por mercado e por entregador</h2>
+    <p class="muted" style="margin-top:-8px;">Considera só pedidos já marcados como entregues no período. Se um mercado tiver mais de um funcionário associado, a entrega conta pra cada um deles.</p>
+    <div class="card">
+      <div class="row2">
+        <div class="field"><label>De</label><input type="date" id="entregDe"></div>
+        <div class="field"><label>Até</label><input type="date" id="entregAte"></div>
+      </div>
+      <div style="display:flex;gap:8px;">
+        <button class="btn btn-primary btn-small" id="btnFiltrarEntregadores" type="button">Filtrar</button>
+        <button class="btn btn-ghost btn-small" id="btnLimparEntregadores" type="button">Limpar filtro</button>
+      </div>
+    </div>
+    <div class="row2">
+      <div class="card">
+        <h3 style="margin-top:0;">Entregas por mercado</h3>
+        <div class="table-scroll"><table class="list cards" id="tabelaEntregasMercado"></table></div>
+      </div>
+      <div class="card">
+        <h3 style="margin-top:0;">Entregas por entregador</h3>
+        <div class="table-scroll"><table class="list cards" id="tabelaEntregasFuncionario"></table></div>
+      </div>
     </div>
   </section>
 
@@ -809,6 +851,7 @@ const DEFAULT_CLIENTES = [
 let produtos = [];
 let clientes = [];
 let pedidos = [];
+let funcionarios = []; // [{id, nome, clientesIds:[...]}] — quem entrega pra quais mercados
 let precos = {}; // { [clienteId]: { [itemKey]: valorNumero } } — override de preço por cliente
 let transporteConfig = { placa:'', uf:'PR' }; // dados do veículo próprio usado na entrega (Portal Receita/PR)
 let ticketsExpandidos = new Set(); // ids de pedidos ENTREGUES que a usuária abriu manualmente (ficam retraídos por padrão)
@@ -817,6 +860,7 @@ let currentPrecoClienteId = null;
 let editingProdutoId = null;
 let editingClienteId = null;
 let editingPedidoId = null;
+let editingFuncionarioId = null;
 
 function uid(){ return Date.now().toString(36) + Math.random().toString(36).slice(2,7); }
 
@@ -825,12 +869,15 @@ async function loadAll(){
   clientes = await getOrInit('clientes', DEFAULT_CLIENTES);
   pedidos = await loadPedidos();
   precos = await getOrInit('precos', {});
+  funcionarios = await getOrInit('funcionarios', []);
   transporteConfig = await getOrInit('transporte', { placa:'', uf:'PR' });
+  await migrarPrecosPedidosAntigos();
   renderClientesSelect();
   renderClientesTable();
   renderProdutosTable();
   renderPedidos();
   renderNpGrid();
+  renderFuncionariosTable();
   atualizarBannerLembretes();
   document.getElementById('npData').valueAsDate = new Date();
 }
@@ -872,6 +919,27 @@ async function loadPedidos(){
     console.error(e);
     showToast('Erro ao carregar pedidos. Verifique sua internet.');
     return [];
+  }
+}
+
+// Migração: pedidos lançados antes desta correção não têm o preço de
+// cada item "congelado" (it.precoUnit) — eles ainda calculavam o valor
+// em tempo real a partir do preço atual do produto/cliente, o que fazia
+// o valor de pedidos antigos mudar quando um preço era alterado depois.
+// Aqui, na primeira vez que o app carrega após a correção, gravamos o
+// preço atualmente em vigor em cada item desses pedidos antigos, para
+// que eles parem de variar a partir de agora. Não é possível recuperar
+// o valor exato que estava em vigor no dia do lançamento original.
+async function migrarPrecosPedidosAntigos(){
+  for(const p of pedidos){
+    let mudou = false;
+    (p.itens || []).forEach(it=>{
+      if(it.precoUnit == null || it.precoUnit === ''){
+        it.precoUnit = getPreco(p.clienteId, it.codigo);
+        mudou = true;
+      }
+    });
+    if(mudou) await savePedido(p);
   }
 }
 
@@ -1135,6 +1203,11 @@ document.querySelectorAll('nav.tabs button').forEach(btn=>{
     document.querySelectorAll('.panel').forEach(p=>p.classList.remove('active'));
     btn.classList.add('active');
     document.getElementById('panel-'+btn.dataset.tab).classList.add('active');
+    if(btn.dataset.tab==='entregadores'){
+      renderFnMercadosChecklist();
+      renderFuncionariosTable();
+      renderRelEntregadores();
+    }
   });
 });
 
@@ -1363,6 +1436,14 @@ async function excluirCliente(id){
   if(!ok) return;
   clientes = clientes.filter(x=>x.id!==id);
   await save('clientes', clientes);
+  let funcionariosMudou = false;
+  funcionarios.forEach(f=>{
+    if(f.clientesIds && f.clientesIds.includes(id)){
+      f.clientesIds = f.clientesIds.filter(cid=>cid!==id);
+      funcionariosMudou = true;
+    }
+  });
+  if(funcionariosMudou) await save('funcionarios', funcionarios);
   if(editingClienteId===id) cancelarEdicaoCliente();
   renderClientesSelect(); renderClientesTable();
   updateNpGridPrices();
@@ -1404,6 +1485,133 @@ document.getElementById('btnSalvarCliente').addEventListener('click', async ()=>
   atualizarBannerLembretes();
   limparFormCliente();
   showToast('Cliente salvo.');
+});
+
+// FUNCIONÁRIOS / ENTREGADORES
+function renderFnMercadosChecklist(){
+  const wrap = document.getElementById('fnMercadosChecklist');
+  if(!wrap) return;
+  if(clientes.length===0){ wrap.innerHTML = '<span class="muted">Cadastre um cliente/mercado primeiro.</span>'; return; }
+  const marcados = editingFuncionarioId
+    ? (funcionarios.find(f=>f.id===editingFuncionarioId)?.clientesIds || [])
+    : [];
+  wrap.innerHTML = clientes.map(c=>`
+    <label style="display:flex;align-items:center;gap:8px;font-weight:400;">
+      <input type="checkbox" value="${c.id}" ${marcados.includes(c.id)?'checked':''}>
+      ${c.apelido || c.nome}
+    </label>
+  `).join('');
+}
+function renderFuncionariosTable(){
+  const t = document.getElementById('tabelaFuncionarios');
+  if(!t) return;
+  if(funcionarios.length===0){ t.innerHTML = '<tr><td class="empty">Nenhum funcionário cadastrado ainda.</td></tr>'; return; }
+  t.innerHTML = `<tr><th>Nome</th><th>Mercados que entrega</th><th></th><th></th></tr>` +
+    funcionarios.map(f=>{
+      const nomesMercados = (f.clientesIds||[]).map(id=>clienteNome(id)).join(', ') || '—';
+      return `<tr>
+        <td data-label="Nome">${f.nome}</td>
+        <td data-label="Mercados">${nomesMercados}</td>
+        <td data-label="">${`<button class="btn btn-ghost btn-small" data-action="editar-funcionario" data-id="${f.id}">Editar</button>`}</td>
+        <td data-label="">${`<button class="btn btn-danger btn-small" data-action="excluir-funcionario" data-id="${f.id}">Excluir</button>`}</td>
+      </tr>`;
+    }).join('');
+  t.querySelectorAll('[data-action="editar-funcionario"]').forEach(b=>b.addEventListener('click', ()=>iniciarEdicaoFuncionario(b.dataset.id)));
+  t.querySelectorAll('[data-action="excluir-funcionario"]').forEach(b=>b.addEventListener('click', ()=>excluirFuncionario(b.dataset.id)));
+}
+function limparFormFuncionario(){
+  document.getElementById('fnNome').value = '';
+  renderFnMercadosChecklist();
+}
+function iniciarEdicaoFuncionario(id){
+  const f = funcionarios.find(x=>x.id===id);
+  if(!f) return;
+  editingFuncionarioId = id;
+  document.getElementById('fnNome').value = f.nome || '';
+  renderFnMercadosChecklist();
+  document.getElementById('btnSalvarFuncionario').textContent = 'Atualizar funcionário';
+  document.getElementById('btnCancelarEdicaoFuncionario').style.display = 'inline-block';
+  document.getElementById('fnNome').scrollIntoView({behavior:'smooth', block:'center'});
+}
+function cancelarEdicaoFuncionario(){
+  editingFuncionarioId = null;
+  limparFormFuncionario();
+  document.getElementById('btnSalvarFuncionario').textContent = 'Salvar funcionário';
+  document.getElementById('btnCancelarEdicaoFuncionario').style.display = 'none';
+}
+document.getElementById('btnCancelarEdicaoFuncionario').addEventListener('click', cancelarEdicaoFuncionario);
+async function excluirFuncionario(id){
+  const f = funcionarios.find(x=>x.id===id);
+  if(!f) return;
+  const ok = await pedirSenhaEExcluir(`Excluir "${f.nome}" da lista de funcionários?`);
+  if(!ok) return;
+  funcionarios = funcionarios.filter(x=>x.id!==id);
+  await save('funcionarios', funcionarios);
+  if(editingFuncionarioId===id) cancelarEdicaoFuncionario();
+  renderFuncionariosTable();
+  renderRelEntregadores();
+  showToast('Funcionário excluído.');
+}
+document.getElementById('btnSalvarFuncionario').addEventListener('click', async ()=>{
+  const nome = document.getElementById('fnNome').value.trim();
+  if(!nome){ showToast('Preencha o nome do funcionário.'); return; }
+  const clientesIds = Array.from(document.querySelectorAll('#fnMercadosChecklist input[type="checkbox"]:checked')).map(i=>i.value);
+  if(editingFuncionarioId){
+    const f = funcionarios.find(x=>x.id===editingFuncionarioId);
+    if(f){ f.nome = nome; f.clientesIds = clientesIds; }
+    await save('funcionarios', funcionarios);
+    cancelarEdicaoFuncionario();
+    renderFuncionariosTable();
+    renderRelEntregadores();
+    showToast('Funcionário atualizado.');
+    return;
+  }
+  funcionarios.push({ id: uid(), nome, clientesIds });
+  await save('funcionarios', funcionarios);
+  renderFuncionariosTable();
+  renderRelEntregadores();
+  limparFormFuncionario();
+  showToast('Funcionário salvo.');
+});
+
+// Relatório: quantas entregas foram feitas por mercado e por entregador.
+// Um "entregador" pode estar associado a mais de um mercado — nesse caso,
+// as entregas daquele mercado contam pra cada funcionário associado a ele.
+function renderRelEntregadores(){
+  const tabMercado = document.getElementById('tabelaEntregasMercado');
+  const tabFunc = document.getElementById('tabelaEntregasFuncionario');
+  if(!tabMercado || !tabFunc) return;
+  const de = document.getElementById('entregDe') ? document.getElementById('entregDe').value : '';
+  const ate = document.getElementById('entregAte') ? document.getElementById('entregAte').value : '';
+  const entregues = pedidos.filter(p=>p.status==='entregue' && (!de || p.dataEntrega>=de) && (!ate || p.dataEntrega<=ate));
+
+  const porMercado = {};
+  entregues.forEach(p=>{ porMercado[p.clienteId] = (porMercado[p.clienteId]||0) + 1; });
+
+  const idsMercado = Object.keys(porMercado).sort((a,b)=> clienteNome(a).localeCompare(clienteNome(b)));
+  if(idsMercado.length===0){
+    tabMercado.innerHTML = '<tr><td class="empty">Nenhum pedido entregue no período.</td></tr>';
+  } else {
+    tabMercado.innerHTML = `<tr><th>Mercado</th><th>Entregas</th></tr>` +
+      idsMercado.map(id=>`<tr><td data-label="Mercado">${clienteNome(id)}</td><td data-label="Entregas">${porMercado[id]}</td></tr>`).join('') +
+      `<tr style="border-top:2px solid var(--forest);"><td data-label="Total"><b>Total</b></td><td data-label="Entregas"><b>${entregues.length}</b></td></tr>`;
+  }
+
+  if(funcionarios.length===0){
+    tabFunc.innerHTML = '<tr><td class="empty">Nenhum funcionário cadastrado ainda.</td></tr>';
+    return;
+  }
+  const linhasFunc = funcionarios.map(f=>{
+    const total = (f.clientesIds||[]).reduce((s,cid)=> s + (porMercado[cid]||0), 0);
+    return {nome: f.nome, total};
+  }).sort((a,b)=> b.total - a.total);
+  tabFunc.innerHTML = `<tr><th>Entregador</th><th>Entregas</th></tr>` +
+    linhasFunc.map(l=>`<tr><td data-label="Entregador">${l.nome}</td><td data-label="Entregas">${l.total}</td></tr>`).join('');
+}
+document.getElementById('btnFiltrarEntregadores').addEventListener('click', renderRelEntregadores);
+document.getElementById('btnLimparEntregadores').addEventListener('click', ()=>{
+  document.getElementById('entregDe').value=''; document.getElementById('entregAte').value='';
+  renderRelEntregadores();
 });
 
 // PRODUTOS
@@ -1597,13 +1805,28 @@ document.getElementById('btnSalvarPedido').addEventListener('click', async ()=>{
   if(itens.length===0){ showToast('Preencha a quantidade de ao menos uma espécie.'); return; }
   if(editingPedidoId){
     const p = pedidos.find(x=>x.id===editingPedidoId);
-    if(p){ p.clienteId = clienteId; p.data = data; p.itens = itens; await savePedido(p); }
+    if(p){
+      // Ao editar um pedido, preserva o preço já congelado dos itens que
+      // continuam no pedido (mesmo código), e só busca o preço atual do
+      // cliente para itens novos que não existiam antes na edição. Assim,
+      // reabrir e salvar um pedido antigo não "atualiza" o valor pra hoje.
+      const itensAnteriores = p.itens || [];
+      itens.forEach(it=>{
+        const anterior = itensAnteriores.find(a=>a.codigo===it.codigo);
+        it.precoUnit = anterior && anterior.precoUnit != null ? anterior.precoUnit : getPreco(clienteId, it.codigo);
+      });
+      p.clienteId = clienteId; p.data = data; p.itens = itens; await savePedido(p);
+    }
     cancelarEdicaoPedido();
     renderPedidos();
     document.querySelector('nav.tabs button[data-tab="pedidos"]').click();
     showToast('Pedido atualizado.');
     return;
   }
+  // Congela o preço de cada item no momento do lançamento — alterações
+  // futuras no preço do produto ou no preço do cliente não afetam mais
+  // este pedido depois de salvo.
+  itens.forEach(it=>{ it.precoUnit = getPreco(clienteId, it.codigo); });
   const novoPedido = { id: uid(), clienteId, data, itens, status:'pendente', notaNumero:'', notaChave:'', dataEntrega:'' };
   pedidos.push(novoPedido);
   await savePedido(novoPedido);
@@ -1627,8 +1850,17 @@ function getPreco(clienteId, itemKey){
   if(overrides && overrides[itemKey] != null && overrides[itemKey] !== '') return parseFloat(overrides[itemKey]);
   return produtoInfo(itemKey).valor;
 }
+// Preço efetivamente aplicado a um item já lançado em um pedido.
+// Usa o preço CONGELADO no momento do lançamento (it.precoUnit), que fica
+// gravado no próprio item. Isso garante que alterar o preço de um produto
+// hoje não altere o valor de pedidos já lançados no passado.
+// Fallback para getPreco() apenas em pedidos antigos, salvos antes dessa
+// correção, que ainda não têm precoUnit gravado.
+function getPrecoItem(pedido, it){
+  return (it.precoUnit != null && it.precoUnit !== '') ? parseFloat(it.precoUnit) : getPreco(pedido.clienteId, it.codigo);
+}
 function pedidoTotal(pedido){
-  return pedido.itens.reduce((s,it)=> s + getPreco(pedido.clienteId, it.codigo) * it.quantidade, 0);
+  return pedido.itens.reduce((s,it)=> s + getPrecoItem(pedido, it) * it.quantidade, 0);
 }
 // Perda/devolução agora é lançada por produto (quantidade), e convertida em R$
 // usando o preço aplicado a esse cliente/produto — não mais um valor único em R$.
@@ -1636,7 +1868,7 @@ function devolucaoValorTotal(pedido){
   const dev = pedido.devolucoes || {};
   return pedido.itens.reduce((s,it)=>{
     const q = dev[it.codigo] || 0;
-    return s + q * getPreco(pedido.clienteId, it.codigo);
+    return s + q * getPrecoItem(pedido, it);
   }, 0);
 }
 function fmtData(d){
@@ -1723,7 +1955,7 @@ function ticketHTML(p){
   const liquido = total - devolucao;
   const itensHtml = p.itens.map(it=>{
     const info = produtoInfo(it.codigo);
-    const preco = getPreco(p.clienteId, it.codigo);
+    const preco = getPrecoItem(p, it);
     const subtotal = preco * it.quantidade;
     return `<li><span class="nome">${info.descricao}<span class="preco">R$ ${preco.toFixed(2)} un.</span></span><span class="qtd">${it.quantidade} ${info.unidade}<span class="subtotal">R$ ${subtotal.toFixed(2)}</span></span></li>`;
   }).join('');
@@ -1854,7 +2086,7 @@ TOTAL DA NOTA: R$ ${total.toFixed(2)}`;
 function montarLinhasItens(p){
   return p.itens.map(it=>{
     const info = produtoInfo(it.codigo);
-    const valorAplicado = getPreco(p.clienteId, it.codigo);
+    const valorAplicado = getPrecoItem(p, it);
     const vtotal = valorAplicado * it.quantidade;
     const cabecalho = info.codigo ? `${info.codigo}  ${info.descricao}` : `${info.descricao}  (código a definir)`;
     return `${cabecalho}\n  NCM ${info.ncm||'—'}  CFOP ${info.cfop}  ${it.quantidade} ${info.unidade} x R$ ${valorAplicado.toFixed(2)} = R$ ${vtotal.toFixed(2)}`;
@@ -1870,7 +2102,7 @@ const EMITENTE_COMPROVANTE = {
 function gerarComprovanteHTML(p, c, total){
   const linhasHtml = p.itens.map(it=>{
     const info = produtoInfo(it.codigo);
-    const valorAplicado = getPreco(p.clienteId, it.codigo);
+    const valorAplicado = getPrecoItem(p, it);
     const vtotal = valorAplicado * it.quantidade;
     const codigo = info.codigo ? `${info.codigo} ` : '';
     return `<tr>
@@ -2105,7 +2337,7 @@ function coletarVendasPorProduto(de, ate, filtroCliente){
     if(!porCliente[p.clienteId]) porCliente[p.clienteId] = {};
     const grupo = porCliente[p.clienteId];
     p.itens.forEach(it=>{
-      const unit = getPreco(p.clienteId, it.codigo);
+      const unit = getPrecoItem(p, it);
       const vlrVen = it.quantidade * unit;
       const qtdDev = dev[it.codigo] || 0;
       const desconto = qtdDev * unit;
@@ -2238,7 +2470,7 @@ function coletarPerdas(){
           clienteNome: clienteNome(p.clienteId),
           produtoDescricao: info.descricao,
           quantidade: qtd,
-          valor: qtd * getPreco(p.clienteId, it.codigo)
+          valor: qtd * getPrecoItem(p, it)
         });
       });
     });
@@ -2344,7 +2576,7 @@ function coletarArrecadado(){
           clienteNome: clienteNome(p.clienteId),
           produtoDescricao: info.descricao,
           quantidade: qtdLiquida,
-          valor: qtdLiquida * getPreco(p.clienteId, it.codigo)
+          valor: qtdLiquida * getPrecoItem(p, it)
         });
       });
     });

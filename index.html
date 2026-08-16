@@ -705,6 +705,7 @@
       <div style="display:flex;gap:8px;flex-wrap:wrap;">
         <button class="btn btn-primary btn-small" id="btnGerarRelProdutos" type="button">Gerar relatório</button>
         <button class="btn btn-ghost btn-small" id="btnImprimirRelProdutos" type="button">Imprimir</button>
+        <button class="btn btn-ghost btn-small" id="btnPdfRelProdutos" type="button">Baixar como PDF</button>
         <button class="btn btn-ghost btn-small" id="btnLimparRelProdutos" type="button">Limpar filtro</button>
       </div>
     </div>
@@ -832,6 +833,7 @@
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/html2pdf.js@0.10.2/dist/html2pdf.bundle.min.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-auth-compat.js"></script>
@@ -2579,6 +2581,53 @@ document.getElementById('btnImprimirRelProdutos').addEventListener('click', ()=>
   ajustarAlturaPagina();
   window.print();
   setTimeout(()=>{ imprimindo = false; }, 500);
+});
+
+document.getElementById('btnPdfRelProdutos').addEventListener('click', ()=>{
+  const de = document.getElementById('rpDe').value;
+  const ate = document.getElementById('rpAte').value;
+  const filtroCliente = document.getElementById('rpCliente').value;
+  const grupos = coletarVendasPorProduto(de, ate, filtroCliente);
+  if(grupos.length===0){ showToast('Nada pra gerar PDF nesse período/filtro.'); return; }
+
+  const btn = document.getElementById('btnPdfRelProdutos');
+  const textoOriginal = btn.textContent;
+  btn.disabled = true;
+  btn.textContent = 'Gerando PDF...';
+
+  const container = document.createElement('div');
+  container.style.position = 'fixed';
+  container.style.left = '-9999px';
+  container.style.top = '0';
+  container.style.width = '700px';
+  container.style.background = '#ffffff';
+  container.style.padding = '18px';
+  container.innerHTML = gerarRelProdutosHTML(grupos, de, ate);
+  document.body.appendChild(container);
+
+  const partes = ['relatorio-produtos'];
+  if(filtroCliente) partes.push(clienteNome(filtroCliente).toLowerCase().replace(/\s+/g,'-'));
+  if(de) partes.push(de);
+  if(ate) partes.push(ate);
+  const nomeArquivo = partes.join('_') + '.pdf';
+
+  html2pdf().set({
+    margin: 10,
+    filename: nomeArquivo,
+    image: { type: 'jpeg', quality: 0.98 },
+    html2canvas: { scale: 2, useCORS: true, backgroundColor: '#ffffff' },
+    jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
+    pagebreak: { mode: ['css', 'legacy'] }
+  }).from(container).save().then(()=>{
+    document.body.removeChild(container);
+    btn.disabled = false;
+    btn.textContent = textoOriginal;
+  }).catch(()=>{
+    document.body.removeChild(container);
+    btn.disabled = false;
+    btn.textContent = textoOriginal;
+    showToast('Erro ao gerar o PDF.');
+  });
 });
 
 // PERDAS — filtro por produto e mercado, com gráfico e tabela

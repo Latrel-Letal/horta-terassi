@@ -552,12 +552,9 @@
       </div>
       <div class="row2">
         <div class="field">
-          <label>Mercado</label>
-          <div class="ac-combo">
-            <input type="text" id="entregMercadoBusca" placeholder="Todos os mercados" autocomplete="off">
-            <input type="hidden" id="entregMercado">
-            <div id="entregMercadoLista" class="ac-list"></div>
-          </div>
+          <label>Mercado <span class="muted">(pode marcar mais de um)</span></label>
+          <input type="text" id="entregMercadoFiltroBusca" placeholder="Buscar mercado por nome..." style="margin-bottom:8px;">
+          <div id="entregMercadoFiltroChecklist" style="display:flex;flex-direction:column;gap:6px;max-height:180px;overflow:auto;border:1px solid var(--line);border-radius:8px;padding:10px;"></div>
         </div>
         <div class="field">
           <label>Entregador</label>
@@ -1651,6 +1648,38 @@ document.getElementById('btnSalvarFuncionario').addEventListener('click', async 
 // Relatório: quantas entregas foram feitas por mercado e por entregador.
 // Um "entregador" pode estar associado a mais de um mercado — nesse caso,
 // as entregas daquele mercado contam pra cada funcionário associado a ele.
+let entregMercadoFiltroSelecionados = []; // ids de mercados marcados no filtro de entregas (multi-seleção)
+function renderEntregMercadoFiltroChecklist(){
+  const wrap = document.getElementById('entregMercadoFiltroChecklist');
+  if(!wrap) return;
+  entregMercadoFiltroSelecionados = entregMercadoFiltroSelecionados.filter(id=> clientes.some(c=>c.id===id));
+  if(clientes.length===0){ wrap.innerHTML = '<span class="muted">Nenhum mercado cadastrado.</span>'; return; }
+  wrap.innerHTML = clientes.map(c=>{
+    const nome = c.apelido || c.nome;
+    return `
+    <label data-nome="${nome.replace(/"/g,'&quot;').toLowerCase()}" style="display:flex;align-items:center;gap:8px;font-weight:400;">
+      <input type="checkbox" value="${c.id}" ${entregMercadoFiltroSelecionados.includes(c.id)?'checked':''}>
+      ${nome}
+    </label>
+  `;
+  }).join('');
+  filtrarEntregMercadoFiltroChecklist();
+}
+function filtrarEntregMercadoFiltroChecklist(){
+  const buscaEl = document.getElementById('entregMercadoFiltroBusca');
+  const termo = buscaEl ? buscaEl.value.trim().toLowerCase() : '';
+  document.querySelectorAll('#entregMercadoFiltroChecklist label').forEach(lbl=>{
+    const nome = lbl.dataset.nome || '';
+    lbl.style.display = (!termo || nome.includes(termo)) ? 'flex' : 'none';
+  });
+}
+document.getElementById('entregMercadoFiltroBusca').addEventListener('input', filtrarEntregMercadoFiltroChecklist);
+document.getElementById('entregMercadoFiltroChecklist').addEventListener('change', (e)=>{
+  if(e.target.type==='checkbox'){
+    entregMercadoFiltroSelecionados = Array.from(document.querySelectorAll('#entregMercadoFiltroChecklist input[type="checkbox"]:checked')).map(i=>i.value);
+    renderRelEntregadores();
+  }
+});
 function populateEntregFiltros(){
   const sel = document.getElementById('entregFuncionario');
   if(sel){
@@ -1659,7 +1688,7 @@ function populateEntregFiltros(){
       funcionarios.map(f=>`<option value="${f.id}">${f.nome}</option>`).join('');
     if(funcionarios.some(f=>f.id===atual)) sel.value = atual;
   }
-  sincronizarComboCliente('entregMercadoBusca', 'entregMercado');
+  renderEntregMercadoFiltroChecklist();
 }
 function renderRelEntregadores(){
   const tabMercado = document.getElementById('tabelaEntregasMercado');
@@ -1667,13 +1696,13 @@ function renderRelEntregadores(){
   if(!tabMercado || !tabFunc) return;
   const de = document.getElementById('entregDe') ? document.getElementById('entregDe').value : '';
   const ate = document.getElementById('entregAte') ? document.getElementById('entregAte').value : '';
-  const mercadoFiltro = document.getElementById('entregMercado') ? document.getElementById('entregMercado').value : '';
+  const mercadoFiltroArr = entregMercadoFiltroSelecionados;
   const funcionarioFiltro = document.getElementById('entregFuncionario') ? document.getElementById('entregFuncionario').value : '';
   const entregues = pedidos.filter(p=>
     p.status==='entregue' &&
     (!de || p.dataEntrega>=de) &&
     (!ate || p.dataEntrega<=ate) &&
-    (!mercadoFiltro || p.clienteId===mercadoFiltro)
+    (mercadoFiltroArr.length===0 || mercadoFiltroArr.includes(p.clienteId))
   );
 
   const porMercado = {};
@@ -1725,11 +1754,13 @@ document.getElementById('entregFuncionarioOrdem').addEventListener('change', ren
 document.getElementById('btnFiltrarEntregadores').addEventListener('click', renderRelEntregadores);
 document.getElementById('btnLimparEntregadores').addEventListener('click', ()=>{
   document.getElementById('entregDe').value=''; document.getElementById('entregAte').value='';
-  selecionarCliente('entregMercado', 'entregMercadoBusca', '');
+  entregMercadoFiltroSelecionados = [];
+  const buscaMercado = document.getElementById('entregMercadoFiltroBusca');
+  if(buscaMercado) buscaMercado.value = '';
+  renderEntregMercadoFiltroChecklist();
   document.getElementById('entregFuncionario').value = '';
   renderRelEntregadores();
 });
-setupClienteCombo('entregMercadoBusca', 'entregMercado', 'entregMercadoLista', {todosLabel:'Todos os mercados'});
 
 // PRODUTOS
 function renderProdutosTable(){

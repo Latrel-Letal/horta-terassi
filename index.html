@@ -564,6 +564,7 @@
       <div class="field"><label>Nome</label><input type="text" id="fnNome" placeholder="Ex: João"></div>
       <div class="field">
         <label>Mercados que entrega</label>
+        <input type="text" id="fnMercadosBusca" placeholder="Buscar mercado por nome..." style="margin-bottom:8px;">
         <div id="fnMercadosChecklist" style="display:flex;flex-direction:column;gap:6px;max-height:220px;overflow:auto;border:1px solid var(--line);border-radius:8px;padding:10px;"></div>
       </div>
       <button class="btn btn-primary" id="btnSalvarFuncionario" type="button">Salvar funcionário</button>
@@ -576,6 +577,20 @@
       <div class="row2">
         <div class="field"><label>De</label><input type="date" id="entregDe"></div>
         <div class="field"><label>Até</label><input type="date" id="entregAte"></div>
+      </div>
+      <div class="row2">
+        <div class="field">
+          <label>Mercado</label>
+          <div class="ac-combo">
+            <input type="text" id="entregMercadoBusca" placeholder="Todos os mercados" autocomplete="off">
+            <input type="hidden" id="entregMercado">
+            <div id="entregMercadoLista" class="ac-list"></div>
+          </div>
+        </div>
+        <div class="field">
+          <label>Entregador</label>
+          <select id="entregFuncionario"><option value="">Todos os entregadores</option></select>
+        </div>
       </div>
       <div style="display:flex;gap:8px;">
         <button class="btn btn-primary btn-small" id="btnFiltrarEntregadores" type="button">Filtrar</button>
@@ -1206,6 +1221,7 @@ document.querySelectorAll('nav.tabs button').forEach(btn=>{
     if(btn.dataset.tab==='entregadores'){
       renderFnMercadosChecklist();
       renderFuncionariosTable();
+      populateEntregFiltros();
       renderRelEntregadores();
     }
   });
@@ -1495,13 +1511,26 @@ function renderFnMercadosChecklist(){
   const marcados = editingFuncionarioId
     ? (funcionarios.find(f=>f.id===editingFuncionarioId)?.clientesIds || [])
     : [];
-  wrap.innerHTML = clientes.map(c=>`
-    <label style="display:flex;align-items:center;gap:8px;font-weight:400;">
+  wrap.innerHTML = clientes.map(c=>{
+    const nome = c.apelido || c.nome;
+    return `
+    <label data-nome="${nome.replace(/"/g,'&quot;').toLowerCase()}" style="display:flex;align-items:center;gap:8px;font-weight:400;">
       <input type="checkbox" value="${c.id}" ${marcados.includes(c.id)?'checked':''}>
-      ${c.apelido || c.nome}
+      ${nome}
     </label>
-  `).join('');
+  `;
+  }).join('');
+  filtrarFnMercadosChecklist();
 }
+function filtrarFnMercadosChecklist(){
+  const buscaEl = document.getElementById('fnMercadosBusca');
+  const termo = buscaEl ? buscaEl.value.trim().toLowerCase() : '';
+  document.querySelectorAll('#fnMercadosChecklist label').forEach(lbl=>{
+    const nome = lbl.dataset.nome || '';
+    lbl.style.display = (!termo || nome.includes(termo)) ? 'flex' : 'none';
+  });
+}
+document.getElementById('fnMercadosBusca').addEventListener('input', filtrarFnMercadosChecklist);
 function renderFuncionariosTable(){
   const t = document.getElementById('tabelaFuncionarios');
   if(!t) return;
@@ -1521,6 +1550,8 @@ function renderFuncionariosTable(){
 }
 function limparFormFuncionario(){
   document.getElementById('fnNome').value = '';
+  const busca = document.getElementById('fnMercadosBusca');
+  if(busca) busca.value = '';
   renderFnMercadosChecklist();
 }
 function iniciarEdicaoFuncionario(id){
@@ -1549,6 +1580,7 @@ async function excluirFuncionario(id){
   await save('funcionarios', funcionarios);
   if(editingFuncionarioId===id) cancelarEdicaoFuncionario();
   renderFuncionariosTable();
+  populateEntregFiltros();
   renderRelEntregadores();
   showToast('Funcionário excluído.');
 }
@@ -1562,6 +1594,7 @@ document.getElementById('btnSalvarFuncionario').addEventListener('click', async 
     await save('funcionarios', funcionarios);
     cancelarEdicaoFuncionario();
     renderFuncionariosTable();
+    populateEntregFiltros();
     renderRelEntregadores();
     showToast('Funcionário atualizado.');
     return;
@@ -1569,6 +1602,7 @@ document.getElementById('btnSalvarFuncionario').addEventListener('click', async 
   funcionarios.push({ id: uid(), nome, clientesIds });
   await save('funcionarios', funcionarios);
   renderFuncionariosTable();
+  populateEntregFiltros();
   renderRelEntregadores();
   limparFormFuncionario();
   showToast('Funcionário salvo.');
@@ -1577,20 +1611,37 @@ document.getElementById('btnSalvarFuncionario').addEventListener('click', async 
 // Relatório: quantas entregas foram feitas por mercado e por entregador.
 // Um "entregador" pode estar associado a mais de um mercado — nesse caso,
 // as entregas daquele mercado contam pra cada funcionário associado a ele.
+function populateEntregFiltros(){
+  const sel = document.getElementById('entregFuncionario');
+  if(sel){
+    const atual = sel.value;
+    sel.innerHTML = '<option value="">Todos os entregadores</option>' +
+      funcionarios.map(f=>`<option value="${f.id}">${f.nome}</option>`).join('');
+    if(funcionarios.some(f=>f.id===atual)) sel.value = atual;
+  }
+  sincronizarComboCliente('entregMercadoBusca', 'entregMercado');
+}
 function renderRelEntregadores(){
   const tabMercado = document.getElementById('tabelaEntregasMercado');
   const tabFunc = document.getElementById('tabelaEntregasFuncionario');
   if(!tabMercado || !tabFunc) return;
   const de = document.getElementById('entregDe') ? document.getElementById('entregDe').value : '';
   const ate = document.getElementById('entregAte') ? document.getElementById('entregAte').value : '';
-  const entregues = pedidos.filter(p=>p.status==='entregue' && (!de || p.dataEntrega>=de) && (!ate || p.dataEntrega<=ate));
+  const mercadoFiltro = document.getElementById('entregMercado') ? document.getElementById('entregMercado').value : '';
+  const funcionarioFiltro = document.getElementById('entregFuncionario') ? document.getElementById('entregFuncionario').value : '';
+  const entregues = pedidos.filter(p=>
+    p.status==='entregue' &&
+    (!de || p.dataEntrega>=de) &&
+    (!ate || p.dataEntrega<=ate) &&
+    (!mercadoFiltro || p.clienteId===mercadoFiltro)
+  );
 
   const porMercado = {};
   entregues.forEach(p=>{ porMercado[p.clienteId] = (porMercado[p.clienteId]||0) + 1; });
 
   const idsMercado = Object.keys(porMercado).sort((a,b)=> clienteNome(a).localeCompare(clienteNome(b)));
   if(idsMercado.length===0){
-    tabMercado.innerHTML = '<tr><td class="empty">Nenhum pedido entregue no período.</td></tr>';
+    tabMercado.innerHTML = '<tr><td class="empty">Nenhum pedido entregue no período/filtro.</td></tr>';
   } else {
     tabMercado.innerHTML = `<tr><th>Mercado</th><th>Entregas</th></tr>` +
       idsMercado.map(id=>`<tr><td data-label="Mercado">${clienteNome(id)}</td><td data-label="Entregas">${porMercado[id]}</td></tr>`).join('') +
@@ -1601,7 +1652,12 @@ function renderRelEntregadores(){
     tabFunc.innerHTML = '<tr><td class="empty">Nenhum funcionário cadastrado ainda.</td></tr>';
     return;
   }
-  const linhasFunc = funcionarios.map(f=>{
+  const funcionariosParaExibir = funcionarioFiltro ? funcionarios.filter(f=>f.id===funcionarioFiltro) : funcionarios;
+  if(funcionariosParaExibir.length===0){
+    tabFunc.innerHTML = '<tr><td class="empty">Nenhum entregador encontrado pra esse filtro.</td></tr>';
+    return;
+  }
+  const linhasFunc = funcionariosParaExibir.map(f=>{
     const total = (f.clientesIds||[]).reduce((s,cid)=> s + (porMercado[cid]||0), 0);
     return {nome: f.nome, total};
   }).sort((a,b)=> b.total - a.total);
@@ -1611,8 +1667,11 @@ function renderRelEntregadores(){
 document.getElementById('btnFiltrarEntregadores').addEventListener('click', renderRelEntregadores);
 document.getElementById('btnLimparEntregadores').addEventListener('click', ()=>{
   document.getElementById('entregDe').value=''; document.getElementById('entregAte').value='';
+  selecionarCliente('entregMercado', 'entregMercadoBusca', '');
+  document.getElementById('entregFuncionario').value = '';
   renderRelEntregadores();
 });
+setupClienteCombo('entregMercadoBusca', 'entregMercado', 'entregMercadoLista', {todosLabel:'Todos os mercados'});
 
 // PRODUTOS
 function renderProdutosTable(){

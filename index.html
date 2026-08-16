@@ -2595,15 +2595,12 @@ document.getElementById('btnPdfRelProdutos').addEventListener('click', ()=>{
   btn.disabled = true;
   btn.textContent = 'Gerando PDF...';
 
-  const container = document.createElement('div');
-  container.style.position = 'fixed';
-  container.style.left = '-9999px';
-  container.style.top = '0';
-  container.style.width = '700px';
-  container.style.background = '#ffffff';
-  container.style.padding = '18px';
-  container.innerHTML = gerarRelProdutosHTML(grupos, de, ate);
-  document.body.appendChild(container);
+  // Usa o próprio card de prévia (visível na página) como fonte pro html2canvas —
+  // gerar num elemento escondido/fora da tela produz PDF em branco.
+  const card = document.getElementById('previewRelProdutosCard');
+  const elemento = document.getElementById('previewRelProdutos');
+  card.style.display = 'block';
+  elemento.innerHTML = gerarRelProdutosHTML(grupos, de, ate);
 
   const partes = ['relatorio-produtos'];
   if(filtroCliente) partes.push(clienteNome(filtroCliente).toLowerCase().replace(/\s+/g,'-'));
@@ -2611,22 +2608,22 @@ document.getElementById('btnPdfRelProdutos').addEventListener('click', ()=>{
   if(ate) partes.push(ate);
   const nomeArquivo = partes.join('_') + '.pdf';
 
-  html2pdf().set({
-    margin: 10,
-    filename: nomeArquivo,
-    image: { type: 'jpeg', quality: 0.98 },
-    html2canvas: { scale: 2, useCORS: true, backgroundColor: '#ffffff' },
-    jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
-    pagebreak: { mode: ['css', 'legacy'] }
-  }).from(container).save().then(()=>{
-    document.body.removeChild(container);
-    btn.disabled = false;
-    btn.textContent = textoOriginal;
-  }).catch(()=>{
-    document.body.removeChild(container);
-    btn.disabled = false;
-    btn.textContent = textoOriginal;
-    showToast('Erro ao gerar o PDF.');
+  requestAnimationFrame(()=>{
+    html2pdf().set({
+      margin: 10,
+      filename: nomeArquivo,
+      image: { type: 'jpeg', quality: 0.98 },
+      html2canvas: { scale: 2, useCORS: true, backgroundColor: '#ffffff' },
+      jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
+      pagebreak: { mode: ['css', 'legacy'] }
+    }).from(elemento).save().then(()=>{
+      btn.disabled = false;
+      btn.textContent = textoOriginal;
+    }).catch(()=>{
+      btn.disabled = false;
+      btn.textContent = textoOriginal;
+      showToast('Erro ao gerar o PDF.');
+    });
   });
 });
 

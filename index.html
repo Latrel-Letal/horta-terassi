@@ -489,42 +489,14 @@
 
   <section class="panel" id="panel-clientes">
     <h2 class="sec">Clientes cadastrados</h2>
-    <div class="field" style="max-width:340px;">
-      <input type="text" id="clBusca" placeholder="Buscar por apelido ou razão social...">
+    <div style="display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap;">
+      <div class="field" style="max-width:340px;flex:1;">
+        <input type="text" id="clBusca" placeholder="Buscar por apelido ou razão social...">
+      </div>
+      <button class="btn btn-primary" id="btnIrAdicionarCliente" type="button" style="margin-bottom:2px;">+ Adicionar cliente</button>
     </div>
     <div class="card">
       <div class="table-scroll"><table class="list cards" id="tabelaClientes"></table></div>
-    </div>
-    <h2 class="sec">Adicionar cliente</h2>
-    <div class="card">
-      <div class="row2">
-        <div class="field"><label>Apelido (como vocês chamam)</label><input type="text" id="clApelido" placeholder="Ex: Muffato Duque"></div>
-        <div class="field"><label>Razão social <span class="muted">(opcional)</span></label><input type="text" id="clNome" placeholder="Ex: Irmãos Muffato & Cia Ltda"></div>
-      </div>
-      <div class="field"><label>CNPJ, CPF ou MEI <span class="muted">(opcional)</span></label><input type="text" id="clCnpj" placeholder="CNPJ, CPF ou MEI — deixe em branco se não tiver"></div>
-      <div class="field"><label>Endereço</label><input type="text" id="clEndereco" placeholder="Rua/Avenida, número"></div>
-      <div class="row2">
-        <div class="field"><label>Bairro</label><input type="text" id="clBairro"></div>
-        <div class="field"><label>Município / UF</label><input type="text" id="clMunicipio" placeholder="Londrina/PR"></div>
-      </div>
-      <div class="row2">
-        <div class="field"><label>CEP</label><input type="text" id="clCep"></div>
-        <div class="field"><label>Inscrição estadual</label><input type="text" id="clIe"></div>
-      </div>
-      <div class="row2">
-        <div class="field">
-          <label>Lembrete de retirada do relatório</label>
-          <select id="clPeriodicidade">
-            <option value="">Sem lembrete</option>
-            <option value="7">A cada 7 dias</option>
-            <option value="15">A cada 15 dias</option>
-            <option value="30">A cada 30 dias</option>
-          </select>
-        </div>
-        <div class="field"><label>Última retirada</label><input type="date" id="clUltimaRetirada"></div>
-      </div>
-      <button class="btn btn-primary" id="btnSalvarCliente" type="button">Salvar cliente</button>
-      <button class="btn btn-ghost" id="btnCancelarEdicaoCliente" type="button" style="display:none;margin-left:8px;">Cancelar edição</button>
     </div>
   </section>
 
@@ -809,6 +781,41 @@
     <div class="sub">Deixe em branco pra usar o preço padrão do produto. Só preencha o que for diferente pra esse cliente.</div>
     <div id="precosLista" style="max-height:50vh;overflow:auto;border:1px solid var(--line);border-radius:8px;"></div>
     <button class="btn btn-primary" id="btnSalvarPrecos" type="button" style="margin-top:16px;">Salvar preços</button>
+  </div>
+</div>
+
+<div class="modal-bg" id="modalCliente">
+  <div class="modal">
+    <button class="modal-close" id="fecharModalCliente">&times;</button>
+    <h3 id="tituloAdicionarCliente">Adicionar cliente</h3>
+    <div class="row2">
+      <div class="field"><label>Apelido (como vocês chamam)</label><input type="text" id="clApelido" placeholder="Ex: Muffato Duque"></div>
+      <div class="field"><label>Razão social <span class="muted">(opcional)</span></label><input type="text" id="clNome" placeholder="Ex: Irmãos Muffato & Cia Ltda"></div>
+    </div>
+    <div class="field"><label>CNPJ, CPF ou MEI <span class="muted">(opcional)</span></label><input type="text" id="clCnpj" placeholder="CNPJ, CPF ou MEI — deixe em branco se não tiver"></div>
+    <div class="field"><label>Endereço</label><input type="text" id="clEndereco" placeholder="Rua/Avenida, número"></div>
+    <div class="row2">
+      <div class="field"><label>Bairro</label><input type="text" id="clBairro"></div>
+      <div class="field"><label>Município / UF</label><input type="text" id="clMunicipio" placeholder="Londrina/PR"></div>
+    </div>
+    <div class="row2">
+      <div class="field"><label>CEP</label><input type="text" id="clCep"></div>
+      <div class="field"><label>Inscrição estadual</label><input type="text" id="clIe"></div>
+    </div>
+    <div class="row2">
+      <div class="field">
+        <label>Lembrete de retirada do relatório</label>
+        <select id="clPeriodicidade">
+          <option value="">Sem lembrete</option>
+          <option value="7">A cada 7 dias</option>
+          <option value="15">A cada 15 dias</option>
+          <option value="30">A cada 30 dias</option>
+        </select>
+      </div>
+      <div class="field"><label>Última retirada</label><input type="date" id="clUltimaRetirada"></div>
+    </div>
+    <button class="btn btn-primary" id="btnSalvarCliente" type="button">Salvar cliente</button>
+    <button class="btn btn-ghost" id="btnCancelarEdicaoCliente" type="button" style="display:none;margin-left:8px;">Cancelar edição</button>
   </div>
 </div>
 
@@ -1424,6 +1431,20 @@ function renderClientesTable(){
   }));
 }
 document.getElementById('clBusca').addEventListener('input', renderClientesTable);
+function abrirModalCliente(){
+  document.getElementById('modalCliente').classList.add('open');
+  document.getElementById('clApelido').focus();
+}
+function fecharModalCliente(){
+  document.getElementById('modalCliente').classList.remove('open');
+  cancelarEdicaoCliente();
+}
+document.getElementById('btnIrAdicionarCliente').addEventListener('click', ()=>{
+  cancelarEdicaoCliente();
+  abrirModalCliente();
+});
+document.getElementById('fecharModalCliente').addEventListener('click', fecharModalCliente);
+document.getElementById('modalCliente').addEventListener('click', (e)=>{ if(e.target.id==='modalCliente') fecharModalCliente(); });
 
 function limparFormCliente(){
   ['clApelido','clNome','clCnpj','clEndereco','clBairro','clMunicipio','clCep','clIe','clUltimaRetirada'].forEach(id=>document.getElementById(id).value='');
@@ -1445,7 +1466,7 @@ function iniciarEdicaoCliente(id){
   document.getElementById('clUltimaRetirada').value = c.ultimaRetiradaRelatorio || '';
   document.getElementById('btnSalvarCliente').textContent = 'Atualizar cliente';
   document.getElementById('btnCancelarEdicaoCliente').style.display = 'inline-block';
-  document.getElementById('clApelido').scrollIntoView({behavior:'smooth', block:'center'});
+  abrirModalCliente();
 }
 function cancelarEdicaoCliente(){
   editingClienteId = null;
@@ -1453,7 +1474,10 @@ function cancelarEdicaoCliente(){
   document.getElementById('btnSalvarCliente').textContent = 'Salvar cliente';
   document.getElementById('btnCancelarEdicaoCliente').style.display = 'none';
 }
-document.getElementById('btnCancelarEdicaoCliente').addEventListener('click', cancelarEdicaoCliente);
+document.getElementById('btnCancelarEdicaoCliente').addEventListener('click', ()=>{
+  cancelarEdicaoCliente();
+  document.getElementById('modalCliente').classList.remove('open');
+});
 
 async function excluirCliente(id){
   const c = clientes.find(x=>x.id===id);
@@ -1505,6 +1529,7 @@ document.getElementById('btnSalvarCliente').addEventListener('click', async ()=>
     updateNpGridPrices();
     atualizarBannerLembretes();
     cancelarEdicaoCliente();
+    document.getElementById('modalCliente').classList.remove('open');
     showToast('Cliente atualizado.');
     return;
   }
@@ -1514,6 +1539,7 @@ document.getElementById('btnSalvarCliente').addEventListener('click', async ()=>
   updateNpGridPrices();
   atualizarBannerLembretes();
   limparFormCliente();
+  document.getElementById('modalCliente').classList.remove('open');
   showToast('Cliente salvo.');
 });
 

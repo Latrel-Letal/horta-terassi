@@ -833,7 +833,7 @@
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/html2pdf.js@0.10.2/dist/html2pdf.bundle.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.2/dist/jspdf.umd.min.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-auth-compat.js"></script>
@@ -2595,37 +2595,123 @@ document.getElementById('btnPdfRelProdutos').addEventListener('click', ()=>{
   btn.disabled = true;
   btn.textContent = 'Gerando PDF...';
 
-  // Usa o próprio card de prévia (visível na página) como fonte pro html2canvas —
-  // gerar num elemento escondido/fora da tela produz PDF em branco.
-  const card = document.getElementById('previewRelProdutosCard');
-  const elemento = document.getElementById('previewRelProdutos');
-  card.style.display = 'block';
-  elemento.innerHTML = gerarRelProdutosHTML(grupos, de, ate);
-
-  const partes = ['relatorio-produtos'];
-  if(filtroCliente) partes.push(clienteNome(filtroCliente).toLowerCase().replace(/\s+/g,'-'));
-  if(de) partes.push(de);
-  if(ate) partes.push(ate);
-  const nomeArquivo = partes.join('_') + '.pdf';
-
-  requestAnimationFrame(()=>{
-    html2pdf().set({
-      margin: 10,
-      filename: nomeArquivo,
-      image: { type: 'jpeg', quality: 0.98 },
-      html2canvas: { scale: 2, useCORS: true, backgroundColor: '#ffffff' },
-      jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
-      pagebreak: { mode: ['css', 'legacy'] }
-    }).from(elemento).save().then(()=>{
-      btn.disabled = false;
-      btn.textContent = textoOriginal;
-    }).catch(()=>{
-      btn.disabled = false;
-      btn.textContent = textoOriginal;
-      showToast('Erro ao gerar o PDF.');
-    });
-  });
+  try{
+    const doc = gerarPdfRelProdutos(grupos, de, ate);
+    const partes = ['relatorio-produtos'];
+    if(filtroCliente) partes.push(clienteNome(filtroCliente).toLowerCase().replace(/\s+/g,'-'));
+    if(de) partes.push(de);
+    if(ate) partes.push(ate);
+    doc.save(partes.join('_') + '.pdf');
+  }catch(e){
+    showToast('Erro ao gerar o PDF.');
+  }finally{
+    btn.disabled = false;
+    btn.textContent = textoOriginal;
+  }
 });
+
+// Gera o PDF do relatório de produtos escrevendo texto vetorial direto (via jsPDF),
+// em vez de "fotografar" a tela — assim não trunca nem deixa espaço em branco
+// em relatórios longos, e a paginação é controlada manualmente.
+function gerarPdfRelProdutos(grupos, de, ate){
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF({ unit:'mm', format:'a4' });
+  const margin = 15;
+  const pageWidth = doc.internal.pageSize.getWidth();
+  const pageHeight = doc.internal.pageSize.getHeight();
+  let y = margin;
+
+  const periodoTexto = (de || ate) ? `${de ? fmtData(de) : '—'} a ${ate ? fmtData(ate) : '—'}` : 'Todo o período';
+
+  function novaPaginaSeNecessario(altura){
+    if(y + altura > pageHeight - margin){
+      doc.addPage();
+      y = margin;
+    }
+  }
+
+  function tituloRelatorio(){
+    novaPaginaSeNecessario(12);
+    doc.setFont('courier','bold');
+    doc.setFontSize(12);
+    doc.text('RELATÓRIO DE VENDAS POR PRODUTOS', pageWidth/2, y, { align:'center' });
+    y += 5;
+    doc.setDrawColor(20);
+    doc.setLineWidth(0.3);
+    doc.line(margin, y, pageWidth-margin, y);
+    y += 6;
+  }
+
+  const colX = { qtd: margin, unit: margin+22, ven: margin+55, desc: margin+90, liq: margin+125 };
+
+  grupos.forEach((g, idx)=>{
+    if(idx>0){
+      novaPaginaSeNecessario(20);
+      doc.setDrawColor(160);
+      doc.setLineDashPattern([1.2,1], 0);
+      doc.line(margin, y, pageWidth-margin, y);
+      doc.setLineDashPattern([], 0);
+      y += 8;
+    }
+    tituloRelatorio();
+
+    doc.setFontSize(9.5);
+    doc.setFont('courier','bold'); doc.text('Cliente:', margin, y);
+    doc.setFont('courier','normal'); doc.text(g.clienteNome, margin + 18, y);
+    y += 5;
+    doc.setFont('courier','bold'); doc.text('Período:', margin, y);
+    doc.setFont('courier','normal'); doc.text(periodoTexto, margin + 18, y);
+    y += 7;
+
+    g.produtos.forEach(p=>{
+      novaPaginaSeNecessario(22);
+
+      doc.setFontSize(9);
+      doc.setFont('courier','bold'); doc.text('Produto:', margin, y);
+      doc.setFont('courier','normal'); doc.text(String(p.codigo || '—'), margin + 18, y);
+      y += 4.5;
+
+      doc.setFont('courier','bold'); doc.text('Nome produto:', margin, y);
+      doc.setFont('courier','normal'); doc.text(String(p.descricao || ''), margin + 26, y);
+      y += 5.5;
+
+      doc.setFont('courier','bold');
+      doc.setFontSize(8);
+      doc.text('QTD', colX.qtd, y);
+      doc.text('UNIT.', colX.unit, y);
+      doc.text('VLR.VEN.', colX.ven, y);
+      doc.text('DESC', colX.desc, y);
+      doc.text('LÍQUIDO', colX.liq, y);
+      y += 1.5;
+      doc.setDrawColor(20);
+      doc.setLineWidth(0.25);
+      doc.line(margin, y, pageWidth-margin, y);
+      y += 4;
+
+      doc.setFont('courier','normal');
+      doc.setFontSize(9);
+      doc.text(String(p.qtd), colX.qtd, y);
+      doc.text(`R$ ${p.unit.toFixed(2)}`, colX.unit, y);
+      doc.text(`R$ ${p.vlrVen.toFixed(2)}`, colX.ven, y);
+      doc.text(`R$ ${p.desconto.toFixed(2)}`, colX.desc, y);
+      doc.text(`R$ ${p.liquido.toFixed(2)}`, colX.liq, y);
+      y += 3.5;
+      doc.setDrawColor(210);
+      doc.setLineDashPattern([0.6,0.6], 0);
+      doc.line(margin, y, pageWidth-margin, y);
+      doc.setLineDashPattern([], 0);
+      y += 6;
+    });
+
+    novaPaginaSeNecessario(8);
+    doc.setFont('courier','bold');
+    doc.setFontSize(10);
+    doc.text(`Total do cliente: R$ ${g.totalLiquido.toFixed(2)}`, pageWidth - margin, y, { align:'right' });
+    y += 4;
+  });
+
+  return doc;
+}
 
 // PERDAS — filtro por produto e mercado, com gráfico e tabela
 let chartPerdas = null;

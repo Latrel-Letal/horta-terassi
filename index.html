@@ -2367,12 +2367,29 @@ function pedirNumeroCopias(){
   if(n>20) n = 20;
   return n;
 }
-// Repete o HTML de uma cópia N vezes, separando cada uma por uma linha
-// tracejada (fica bom tanto pra impressora térmica em bobina contínua
-// quanto pra impressão em folha).
-function repetirParaImpressao(htmlUmaCopia, copias){
-  const separador = '<div style="border-top:1px dashed #000;margin:10px 0;"></div>';
-  return Array(copias).fill(htmlUmaCopia).join(separador);
+// Imprime N cópias de um mesmo conteúdo, cada uma como uma "página" separada
+// (page-break-after) — assim, se a impressora estiver configurada pra cortar
+// a cada página, ela corta entre uma cópia e outra em vez de imprimir tudo
+// numa tira só. O tamanho do @page é medido em cima de UMA cópia (não do
+// total), já que todas as páginas usam o mesmo @page.
+function imprimirComCopias(htmlUmaCopia, copias){
+  const printOutput = document.getElementById('printOutput');
+
+  // 1) mede a altura de uma única cópia pra definir o @page
+  printOutput.innerHTML = htmlUmaCopia;
+  const mm = medirAlturaMM();
+  document.getElementById('printPageSize').textContent =
+    '@page{ size: 80mm ' + mm + 'mm; margin: 0; }';
+
+  // 2) monta as N páginas, cada uma quebrando pra próxima (exceto a última)
+  let paginas = '';
+  for(let i=0;i<copias;i++){
+    const quebra = i < copias-1 ? 'page-break-after:always;' : '';
+    paginas += '<div style="' + quebra + '">' + htmlUmaCopia + '</div>';
+  }
+  printOutput.innerHTML = paginas;
+
+  window.print();
 }
 
 let imprimindo = false;
@@ -2382,9 +2399,7 @@ document.getElementById('btnImprimir').addEventListener('click', ()=>{
   if(copias<1) return;
   imprimindo = true;
   const ficha = '<pre class="resumo-line" style="margin:0;">' + document.getElementById('printFicha').textContent + '</pre>';
-  document.getElementById('printOutput').innerHTML = repetirParaImpressao(ficha, copias);
-  ajustarAlturaPagina();
-  window.print();
+  imprimirComCopias(ficha, copias);
   setTimeout(()=>{ imprimindo = false; }, 500);
 });
 document.getElementById('btnImprimirComprovante').addEventListener('click', ()=>{
@@ -2393,9 +2408,7 @@ document.getElementById('btnImprimirComprovante').addEventListener('click', ()=>
   if(copias<1) return;
   imprimindo = true;
   const comprovante = document.getElementById('printComprovante').innerHTML;
-  document.getElementById('printOutput').innerHTML = repetirParaImpressao(comprovante, copias);
-  ajustarAlturaPagina();
-  window.print();
+  imprimirComCopias(comprovante, copias);
   setTimeout(()=>{ imprimindo = false; }, 500);
 });
 

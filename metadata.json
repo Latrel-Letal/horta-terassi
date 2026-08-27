@@ -1,0 +1,6 @@
+{
+  "name": "Horta Terassi",
+  "description": "Painel completo de pedidos, talão de entregas, emissão NFP-e, relatórios e controle de perdas para a Horta Terassi.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

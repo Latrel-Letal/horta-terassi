@@ -40,7 +40,7 @@ import { imprimirCupomTermico } from './utils/print';
 
 export default function App() {
   // Auth State
-  const [user, setUser] = useState<{ email: string; name: string } | null>(null);
+  const [user, setUser] = useState<{ email: string; name: string; apelido: string } | null>(null);
   const [authLoading, setAuthLoading] = useState(true);
 
   // Maintenance State (realtime from Firebase)
@@ -121,9 +121,11 @@ export default function App() {
     const unsubAuth = onAuthStateChanged(auth, async (fbUser) => {
       if (fbUser && fbUser.email && isEmailAllowed(fbUser.email)) {
         const isAdmin = isEmailAdmin(fbUser.email);
+        const apelidoSalvo = sessionStorage.getItem('horta_apelido') || (isAdmin ? 'Administrador' : 'Desconhecido');
         const loggedUser = {
           email: fbUser.email,
-          name: isAdmin ? 'Administrador (Tanathus)' : 'Fabricio Inacio Terassi'
+          name: isAdmin ? 'Administrador (Tanathus)' : 'Fabricio Inacio Terassi',
+          apelido: apelidoSalvo,
         };
         setUser(loggedUser);
         StorageService.saveAuthUser(loggedUser);
@@ -154,7 +156,8 @@ export default function App() {
   }, [loadFirebaseAllData]);
 
   // Auth handlers
-  const handleLoginSuccess = async (loggedUser: { email: string; name: string }) => {
+  const handleLoginSuccess = async (loggedUser: { email: string; name: string; apelido: string }) => {
+    sessionStorage.setItem('horta_apelido', loggedUser.apelido);
     setUser(loggedUser);
     StorageService.saveAuthUser(loggedUser);
     showToast(`Bem-vindo, ${loggedUser.name}!`);
@@ -167,6 +170,7 @@ export default function App() {
     } catch (e) {
       console.error(e);
     }
+    sessionStorage.removeItem('horta_apelido');
     setUser(null);
     StorageService.saveAuthUser(null);
   };

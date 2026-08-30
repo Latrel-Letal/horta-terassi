@@ -29,6 +29,7 @@ import { PerdasTab } from './components/PerdasTab';
 import { RelatorioMercadoTab } from './components/RelatorioMercadoTab';
 import { RelatorioProdutosTab } from './components/RelatorioProdutosTab';
 import { ImportarTab } from './components/ImportarTab';
+import { RegistroAcessoTab } from './components/RegistroAcessoTab';
 import { ModalFichaNota } from './components/ModalFichaNota';
 import { ModalClienteForm } from './components/ModalClienteForm';
 import { ModalPrecosCliente } from './components/ModalPrecosCliente';
@@ -842,6 +843,10 @@ export default function App() {
               onImportarDados={handleImportarDados}
               showToast={showToast}
             />
+          )}
+
+          {activeTab === 'registroAcesso' && isAdmin && (
+            <RegistroAcessoTab />
           )}
         </main>
       </div>

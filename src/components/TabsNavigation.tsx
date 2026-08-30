@@ -8,7 +8,8 @@ import {
   TrendingDown,
   FileBarChart2,
   FileSpreadsheet,
-  Upload
+  Upload,
+  KeyRound
 } from 'lucide-react';
 
 export type TabType =
@@ -20,7 +21,8 @@ export type TabType =
   | 'perdas'
   | 'relatorio'
   | 'relprodutos'
-  | 'importar';
+  | 'importar'
+  | 'registroAcesso';
 
 interface TabsNavigationProps {
   activeTab: TabType;
@@ -81,6 +83,12 @@ export const TabsNavigation: React.FC<TabsNavigationProps> = ({
       id: 'importar',
       label: 'Importar',
       icon: <Upload className="w-4 h-4" />,
+      adminOnly: true,
+    },
+    {
+      id: 'registroAcesso',
+      label: 'Registro de Acesso',
+      icon: <KeyRound className="w-4 h-4" />,
       adminOnly: true,
     },
   ];

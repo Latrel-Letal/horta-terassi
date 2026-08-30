@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState, useCallback, useMemo } from 'react';
 import {
   LogIn,
   PlusCircle,
@@ -11,6 +11,7 @@ import {
   Users,
   Sprout,
   Truck,
+  UserCircle,
 } from 'lucide-react';
 import { loadLogsPorData, LogAcesso } from '../services/firebase';
 
@@ -47,6 +48,7 @@ export const RegistroAcessoTab: React.FC = () => {
   const [logs, setLogs] = useState<LogAcesso[]>([]);
   const [loading, setLoading] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
+  const [apelidoFiltro, setApelidoFiltro] = useState<string>('todos');
 
   const carregarLogs = useCallback(async (dataISO: string) => {
     setLoading(true);
@@ -64,7 +66,18 @@ export const RegistroAcessoTab: React.FC = () => {
 
   useEffect(() => {
     carregarLogs(dataSelecionada);
+    setApelidoFiltro('todos');
   }, [dataSelecionada, carregarLogs]);
+
+  const apelidosDoDia = useMemo(() => {
+    const unicos: string[] = Array.from(new Set(logs.map(l => l.apelido || l.email)));
+    return unicos.sort((a, b) => a.localeCompare(b, 'pt-BR'));
+  }, [logs]);
+
+  const logsFiltrados = useMemo(() => {
+    if (apelidoFiltro === 'todos') return logs;
+    return logs.filter(l => (l.apelido || l.email) === apelidoFiltro);
+  }, [logs, apelidoFiltro]);
 
   return (
     <div className="space-y-5">
@@ -77,7 +90,7 @@ export const RegistroAcessoTab: React.FC = () => {
           </h2>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <div className="flex items-center gap-2 bg-white border border-[#D8D9C9] rounded-xl px-3 py-2">
             <Calendar className="w-4 h-4 text-[#4B564C]" />
             <input
@@ -88,6 +101,23 @@ export const RegistroAcessoTab: React.FC = () => {
               className="bg-transparent text-sm font-semibold text-[#1B2420] outline-none"
             />
           </div>
+
+          {apelidosDoDia.length > 1 && (
+            <div className="flex items-center gap-2 bg-white border border-[#D8D9C9] rounded-xl px-3 py-2">
+              <UserCircle className="w-4 h-4 text-[#4B564C]" />
+              <select
+                value={apelidoFiltro}
+                onChange={e => setApelidoFiltro(e.target.value)}
+                className="bg-transparent text-sm font-semibold text-[#1B2420] outline-none cursor-pointer"
+              >
+                <option value="todos">Todos</option>
+                {apelidosDoDia.map(apelido => (
+                  <option key={apelido} value={apelido}>{apelido}</option>
+                ))}
+              </select>
+            </div>
+          )}
+
           <button
             onClick={() => carregarLogs(dataSelecionada)}
             disabled={loading}
@@ -113,15 +143,15 @@ export const RegistroAcessoTab: React.FC = () => {
           </div>
         )}
 
-        {!loading && !erro && logs.length === 0 && (
+        {!loading && !erro && logsFiltrados.length === 0 && (
           <div className="p-8 text-center text-sm text-[#4B564C]">
-            Nenhum registro de acesso encontrado para esta data.
+            Nenhum registro de acesso encontrado para esta data{apelidoFiltro !== 'todos' ? ' e pessoa selecionada' : ''}.
           </div>
         )}
 
-        {!loading && !erro && logs.length > 0 && (
+        {!loading && !erro && logsFiltrados.length > 0 && (
           <ul className="divide-y divide-[#EEF1E9]">
-            {logs.map(log => {
+            {logsFiltrados.map(log => {
               const tipoInfo = TIPO_CONFIG[log.tipo] || TIPO_CONFIG.edicao;
               return (
                 <li key={log.id} className="flex items-start gap-3 px-4 py-3">

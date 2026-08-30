@@ -1,16 +1,17 @@
 import React, { useState } from 'react';
-import { Leaf, Lock, Mail, ArrowRight, ShieldAlert, KeyRound } from 'lucide-react';
+import { Leaf, Lock, Mail, ArrowRight, ShieldAlert, UserCircle } from 'lucide-react';
 import { EMITENTE_INFO } from '../constants/initialData';
-import { auth, isEmailAllowed, isEmailAdmin } from '../services/firebase';
+import { auth, isEmailAllowed, isEmailAdmin, registrarLog } from '../services/firebase';
 import { signInWithEmailAndPassword, signOut } from 'firebase/auth';
 
 interface LoginScreenProps {
-  onLoginSuccess: (user: { email: string; name: string }) => void;
+  onLoginSuccess: (user: { email: string; name: string; apelido: string }) => void;
 }
 
 export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
   const [email, setEmail] = useState('');
   const [senha, setSenha] = useState('');
+  const [apelido, setApelido] = useState('');
   const [erro, setErro] = useState('');
   const [loading, setLoading] = useState(false);
 
@@ -19,8 +20,17 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
     setErro('');
 
     const cleanEmail = email.trim();
+    const cleanApelido = apelido.trim();
+    const isAdminEmail = isEmailAdmin(cleanEmail);
+
     if (!cleanEmail || !senha) {
       setErro('Preencha o e-mail e a senha.');
+      return;
+    }
+
+    // Apelido só é obrigatório para quem não é ADM
+    if (!isAdminEmail && !cleanApelido) {
+      setErro('Informe seu apelido para identificação no sistema.');
       return;
     }
 
@@ -44,10 +54,20 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
 
       const isAdmin = isEmailAdmin(loggedEmail);
       const name = isAdmin ? 'Administrador (Tanathus)' : 'Fabricio Inacio Terassi';
+      const apelidoFinal = isAdmin ? 'Administrador' : cleanApelido;
+
+      // Registra o login com o apelido de quem está operando nesta sessão
+      registrarLog({
+        email: loggedEmail,
+        apelido: apelidoFinal,
+        tipo: 'login',
+        descricao: `Login realizado por ${apelidoFinal}`,
+      });
 
       onLoginSuccess({
         email: loggedEmail,
-        name
+        name,
+        apelido: apelidoFinal,
       });
     } catch (firebaseErr: any) {
       console.error('Erro de autenticação:', firebaseErr);
@@ -69,7 +89,6 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
   return (
     <div className="min-h-screen flex items-center justify-center p-4 bg-[#EEF1E9]">
       <div className="bg-white border border-[#D8D9C9] rounded-2xl shadow-xl p-8 max-w-md w-full space-y-6 relative overflow-hidden">
-        {/* Top green accent */}
         <div className="absolute top-0 left-0 right-0 h-2 bg-[#1F3D2B]" />
 
         <div className="text-center space-y-2 pt-2">
@@ -122,6 +141,23 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
               autoComplete="current-password"
             />
           </div>
+
+          {!isEmailAdmin(email.trim()) && (
+            <div>
+              <label className="block text-xs font-bold uppercase tracking-wider text-[#4B564C] mb-1.5 flex items-center gap-1.5">
+                <UserCircle className="w-3.5 h-3.5 text-[#5E8F52]" />
+                Apelido (quem está acessando)
+              </label>
+              <input
+                type="text"
+                value={apelido}
+                onChange={e => setApelido(e.target.value)}
+                placeholder="Ex: João"
+                className="w-full px-4 py-3 text-sm bg-white border border-[#D8D9C9] rounded-xl focus:outline-none focus:ring-2 focus:ring-[#5E8F52]"
+                required
+              />
+            </div>
+          )}
 
           {erro && (
             <div className="text-xs font-semibold text-[#A6432F] bg-[#FDF4F2] p-2.5 rounded-lg border border-[#A6432F]/20 text-center flex items-center justify-center gap-2">

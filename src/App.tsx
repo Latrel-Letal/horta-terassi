@@ -11,7 +11,8 @@ import {
   loadFirebasePedidos, 
   saveFirebasePedido, 
   deleteFirebasePedido, 
-  importarPedidosBatch 
+  importarPedidosBatch,
+  registrarLog
 } from './services/firebase';
 import { onAuthStateChanged, signOut } from 'firebase/auth';
 import { doc, onSnapshot, setDoc, serverTimestamp } from 'firebase/firestore';
@@ -219,6 +220,14 @@ export default function App() {
       showToast('Pedido atualizado com sucesso!');
       try {
         await saveFirebasePedido(atualizado);
+        registrarLog({
+          email: user?.email || '',
+          apelido: user?.apelido || 'Desconhecido',
+          tipo: 'edicao',
+          entidade: 'pedido',
+          entidadeId: atualizado.id,
+          descricao: `Editou o pedido do cliente ${atualizado.clienteId}`,
+        });
       } catch (e) {
         console.error(e);
       }
@@ -234,6 +243,14 @@ export default function App() {
       showToast('Novo pedido lançado com sucesso!');
       try {
         await saveFirebasePedido(novoPedido);
+        registrarLog({
+          email: user?.email || '',
+          apelido: user?.apelido || 'Desconhecido',
+          tipo: 'criacao',
+          entidade: 'pedido',
+          entidadeId: novoPedido.id,
+          descricao: `Lançou novo pedido para o cliente ${novoPedido.clienteId}`,
+        });
       } catch (e) {
         console.error(e);
       }
@@ -254,6 +271,14 @@ export default function App() {
 
     try {
       await saveFirebasePedido(modificado);
+      registrarLog({
+        email: user?.email || '',
+        apelido: user?.apelido || 'Desconhecido',
+        tipo: 'edicao',
+        entidade: 'pedido',
+        entidadeId: pedidoId,
+        descricao: `Marcou o pedido ${pedidoId} como entregue`,
+      });
     } catch (e) {
       console.error(e);
     }
@@ -272,6 +297,14 @@ export default function App() {
 
       try {
         await saveFirebasePedido(modificado);
+        registrarLog({
+          email: user?.email || '',
+          apelido: user?.apelido || 'Desconhecido',
+          tipo: 'edicao',
+          entidade: 'pedido',
+          entidadeId: pedidoId,
+          descricao: `Reabriu o pedido ${pedidoId} (voltou para pendente)`,
+        });
       } catch (e) {
         console.error(e);
       }
@@ -291,6 +324,14 @@ export default function App() {
 
         try {
           await deleteFirebasePedido(pedidoId);
+          registrarLog({
+            email: user?.email || '',
+            apelido: user?.apelido || 'Desconhecido',
+            tipo: 'exclusao',
+            entidade: 'pedido',
+            entidadeId: pedidoId,
+            descricao: `Excluiu o pedido ${pedidoId}`,
+          });
         } catch (e) {
           console.error(e);
         }
@@ -314,6 +355,14 @@ export default function App() {
 
     try {
       await saveFirebasePedido(modificado);
+      registrarLog({
+        email: user?.email || '',
+        apelido: user?.apelido || 'Desconhecido',
+        tipo: 'edicao',
+        entidade: 'pedido',
+        entidadeId: pedidoId,
+        descricao: `Atualizou perda/devolução do produto ${codigoProduto} (qtd: ${qtd}) no pedido ${pedidoId}`,
+      });
     } catch (e) {
       console.error(e);
     }
@@ -323,6 +372,7 @@ export default function App() {
   const handleSalvarCliente = async (cliente: Cliente) => {
     let atualizados: Cliente[];
     const idx = clientes.findIndex(c => c.id === cliente.id);
+    const isNovo = idx < 0;
     if (idx >= 0) {
       atualizados = [...clientes];
       atualizados[idx] = cliente;
@@ -335,6 +385,14 @@ export default function App() {
 
     try {
       await saveDocData('clientes', atualizados);
+      registrarLog({
+        email: user?.email || '',
+        apelido: user?.apelido || 'Desconhecido',
+        tipo: isNovo ? 'criacao' : 'edicao',
+        entidade: 'cliente',
+        entidadeId: cliente.id,
+        descricao: `${isNovo ? 'Cadastrou' : 'Editou'} o cliente ${cliente.apelido || cliente.nome}`,
+      });
     } catch (e) {
       console.error(e);
     }
@@ -368,6 +426,14 @@ export default function App() {
         try {
           await saveDocData('clientes', novosClientes);
           await saveDocData('funcionarios', novosFuncionarios);
+          registrarLog({
+            email: user?.email || '',
+            apelido: user?.apelido || 'Desconhecido',
+            tipo: 'exclusao',
+            entidade: 'cliente',
+            entidadeId: clienteId,
+            descricao: `Excluiu o cliente ${c?.apelido || c?.nome || clienteId}`,
+          });
         } catch (e) {
           console.error(e);
         }
@@ -393,6 +459,7 @@ export default function App() {
     let atualizados: Produto[];
     const key = produto.codigo || `DESC:${produto.descricao}`;
     const idx = produtos.findIndex(p => (p.codigo || `DESC:${p.descricao}`) === key);
+    const isNovo = idx < 0;
     if (idx >= 0) {
       atualizados = [...produtos];
       atualizados[idx] = produto;
@@ -405,6 +472,14 @@ export default function App() {
 
     try {
       await saveDocData('produtos', atualizados);
+      registrarLog({
+        email: user?.email || '',
+        apelido: user?.apelido || 'Desconhecido',
+        tipo: isNovo ? 'criacao' : 'edicao',
+        entidade: 'produto',
+        entidadeId: key,
+        descricao: `${isNovo ? 'Cadastrou' : 'Editou'} o produto ${produto.descricao}`,
+      });
     } catch (e) {
       console.error(e);
     }
@@ -415,6 +490,7 @@ export default function App() {
       isOpen: true,
       mensagem: 'Deseja excluir este produto do catálogo? Pedidos já emitidos permanecerão com seus valores congelados.',
       onConfirm: async () => {
+        const produtoExcluido = produtos.find(p => (p.codigo || `DESC:${p.descricao}`) === codigo);
         const filtrados = produtos.filter(p => (p.codigo || `DESC:${p.descricao}`) !== codigo);
         setProdutos(filtrados);
         StorageService.saveProdutos(filtrados);
@@ -423,6 +499,14 @@ export default function App() {
 
         try {
           await saveDocData('produtos', filtrados);
+          registrarLog({
+            email: user?.email || '',
+            apelido: user?.apelido || 'Desconhecido',
+            tipo: 'exclusao',
+            entidade: 'produto',
+            entidadeId: codigo,
+            descricao: `Excluiu o produto ${produtoExcluido?.descricao || codigo}`,
+          });
         } catch (e) {
           console.error(e);
         }
@@ -434,6 +518,7 @@ export default function App() {
   const handleSalvarFuncionario = async (func: Funcionario) => {
     let atualizados: Funcionario[];
     const idx = funcionarios.findIndex(f => f.id === func.id);
+    const isNovo = idx < 0;
     if (idx >= 0) {
       atualizados = [...funcionarios];
       atualizados[idx] = func;
@@ -446,6 +531,14 @@ export default function App() {
 
     try {
       await saveDocData('funcionarios', atualizados);
+      registrarLog({
+        email: user?.email || '',
+        apelido: user?.apelido || 'Desconhecido',
+        tipo: isNovo ? 'criacao' : 'edicao',
+        entidade: 'funcionario',
+        entidadeId: func.id,
+        descricao: `${isNovo ? 'Cadastrou' : 'Editou'} o entregador ${func.nome}`,
+      });
     } catch (e) {
       console.error(e);
     }
@@ -456,6 +549,7 @@ export default function App() {
       isOpen: true,
       mensagem: 'Deseja excluir este entregador da equipe?',
       onConfirm: async () => {
+        const funcExcluido = funcionarios.find(f => f.id === id);
         const filtrados = funcionarios.filter(f => f.id !== id);
         setFuncionarios(filtrados);
         StorageService.saveFuncionarios(filtrados);
@@ -464,6 +558,14 @@ export default function App() {
 
         try {
           await saveDocData('funcionarios', filtrados);
+          registrarLog({
+            email: user?.email || '',
+            apelido: user?.apelido || 'Desconhecido',
+            tipo: 'exclusao',
+            entidade: 'funcionario',
+            entidadeId: id,
+            descricao: `Excluiu o entregador ${funcExcluido?.nome || id}`,
+          });
         } catch (e) {
           console.error(e);
         }
@@ -539,6 +641,13 @@ export default function App() {
       await importarPedidosBatch(novosPedidos);
     }
     showToast('Importação salva no Firebase com sucesso!');
+    registrarLog({
+      email: user?.email || '',
+      apelido: user?.apelido || 'Desconhecido',
+      tipo: 'criacao',
+      entidade: 'pedido',
+      descricao: `Importou dados em lote: ${novosClientes.length} clientes, ${novosProdutos.length} produtos, ${novosPedidos.length} pedidos`,
+    });
   };
 
   // Thermal Receipt Printing (EPSON TM-T20X e bobinas 80mm)

@@ -9,6 +9,9 @@ import {
   getDocs, 
   onSnapshot, 
   writeBatch,
+  query,
+  where,
+  orderBy,
   serverTimestamp 
 } from 'firebase/firestore';
 import { 
@@ -155,5 +158,50 @@ export async function importarPedidosBatch(novosPedidos: Pedido[]): Promise<void
       batch.set(doc(db, 'horta_data', 'pedidos', 'items', id), { ...p, id });
     });
     await batch.commit();
+  }
+}
+
+// ===== Registro de Acesso / Auditoria =====
+
+export interface LogAcesso {
+  id?: string;
+  email: string;
+  apelido: string;
+  tipo: 'login' | 'criacao' | 'edicao' | 'exclusao';
+  entidade?: 'pedido' | 'cliente' | 'produto' | 'funcionario';
+  entidadeId?: string;
+  descricao?: string;
+  timestamp?: any;
+}
+
+export async function registrarLog(log: Omit<LogAcesso, 'id' | 'timestamp'>): Promise<void> {
+  try {
+    const id = `log_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+    await setDoc(doc(db, 'logs_acesso', id), {
+      ...log,
+      timestamp: serverTimestamp(),
+    });
+  } catch (error) {
+    // Falha ao registrar log não deve travar a ação do usuário
+    console.error('Erro ao registrar log de acesso:', error);
+  }
+}
+
+export async function loadLogsPorData(dataISO: string): Promise<LogAcesso[]> {
+  try {
+    const inicio = new Date(`${dataISO}T00:00:00`);
+    const fim = new Date(`${dataISO}T23:59:59.999`);
+    const logsCol = collection(db, 'logs_acesso');
+    const q = query(
+      logsCol,
+      where('timestamp', '>=', inicio),
+      where('timestamp', '<=', fim),
+      orderBy('timestamp', 'desc')
+    );
+    const snap = await getDocs(q);
+    return snap.docs.map(d => ({ id: d.id, ...(d.data() as LogAcesso) }));
+  } catch (error) {
+    console.error('Erro ao carregar logs de acesso:', error);
+    return [];
   }
 }

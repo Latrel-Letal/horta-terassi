@@ -12,8 +12,10 @@ import {
   Sprout,
   Truck,
   UserCircle,
+  RotateCcw,
+  Check,
 } from 'lucide-react';
-import { loadLogsPorData, LogAcesso } from '../services/firebase';
+import { loadLogsPorData, LogAcesso, restaurarPedido, restaurarItemEmLista, marcarLogComoRecuperado } from '../services/firebase';
 
 function hojeISO(): string {
   return new Date().toISOString().slice(0, 10);
@@ -43,12 +45,19 @@ const ENTIDADE_ICON: Record<string, React.ReactNode> = {
   funcionario: <Truck className="w-3.5 h-3.5" />,
 };
 
+const CHAVE_LISTA: Record<string, 'clientes' | 'produtos' | 'funcionarios'> = {
+  cliente: 'clientes',
+  produto: 'produtos',
+  funcionario: 'funcionarios',
+};
+
 export const RegistroAcessoTab: React.FC = () => {
   const [dataSelecionada, setDataSelecionada] = useState<string>(hojeISO());
   const [logs, setLogs] = useState<LogAcesso[]>([]);
   const [loading, setLoading] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
   const [apelidoFiltro, setApelidoFiltro] = useState<string>('todos');
+  const [recuperandoId, setRecuperandoId] = useState<string | null>(null);
 
   const carregarLogs = useCallback(async (dataISO: string) => {
     setLoading(true);
@@ -69,7 +78,7 @@ export const RegistroAcessoTab: React.FC = () => {
     setApelidoFiltro('todos');
   }, [dataSelecionada, carregarLogs]);
 
-  const apelidosDoDia = useMemo(() => {
+  const apelidosDoDia: string[] = useMemo(() => {
     const unicos: string[] = Array.from(new Set(logs.map(l => l.apelido || l.email)));
     return unicos.sort((a, b) => a.localeCompare(b, 'pt-BR'));
   }, [logs]);
@@ -78,6 +87,30 @@ export const RegistroAcessoTab: React.FC = () => {
     if (apelidoFiltro === 'todos') return logs;
     return logs.filter(l => (l.apelido || l.email) === apelidoFiltro);
   }, [logs, apelidoFiltro]);
+
+  const handleRecuperar = async (log: LogAcesso) => {
+    if (!log.id || !log.dadosAntes || !log.entidade) return;
+    if (!window.confirm('Deseja restaurar este item excluído? Ele voltará a aparecer na lista correspondente.')) return;
+
+    setRecuperandoId(log.id);
+    try {
+      const dados = JSON.parse(log.dadosAntes);
+      if (log.entidade === 'pedido') {
+        await restaurarPedido(dados);
+      } else {
+        const chave = CHAVE_LISTA[log.entidade];
+        if (chave) await restaurarItemEmLista(chave, dados);
+      }
+      await marcarLogComoRecuperado(log.id);
+      setLogs(prev => prev.map(l => (l.id === log.id ? { ...l, recuperado: true } : l)));
+      alert('Item restaurado! Atualize a página (F5) para vê-lo de volta na lista.');
+    } catch (e) {
+      console.error(e);
+      alert('Não foi possível restaurar este item.');
+    } finally {
+      setRecuperandoId(null);
+    }
+  };
 
   return (
     <div className="space-y-5">
@@ -153,6 +186,7 @@ export const RegistroAcessoTab: React.FC = () => {
           <ul className="divide-y divide-[#EEF1E9]">
             {logsFiltrados.map(log => {
               const tipoInfo = TIPO_CONFIG[log.tipo] || TIPO_CONFIG.edicao;
+              const podeRecuperar = log.tipo === 'exclusao' && !!log.dadosAntes && !log.recuperado;
               return (
                 <li key={log.id} className="flex items-start gap-3 px-4 py-3">
                   <div
@@ -179,11 +213,28 @@ export const RegistroAcessoTab: React.FC = () => {
                           {log.entidade}
                         </span>
                       )}
+                      {log.recuperado && (
+                        <span className="flex items-center gap-1 text-[11px] font-semibold text-[#5E8F52] bg-[#5E8F52]/10 px-2 py-0.5 rounded-full">
+                          <Check className="w-3 h-3" />
+                          Recuperado
+                        </span>
+                      )}
                     </div>
                     {log.descricao && (
                       <p className="text-xs text-[#4B564C] mt-1 m-0">{log.descricao}</p>
                     )}
                     <p className="text-[11px] text-[#8A907E] mt-1 m-0">{log.email}</p>
+
+                    {podeRecuperar && (
+                      <button
+                        onClick={() => handleRecuperar(log)}
+                        disabled={recuperandoId === log.id}
+                        className="mt-2 flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-bold text-[#1F3D2B] border border-[#1F3D2B]/30 hover:bg-[#1F3D2B]/5 disabled:opacity-50 transition-colors"
+                      >
+                        <RotateCcw className={`w-3 h-3 ${recuperandoId === log.id ? 'animate-spin' : ''}`} />
+                        Recuperar
+                      </button>
+                    )}
                   </div>
 
                   <span className="text-xs font-mono text-[#4B564C] shrink-0">
@@ -197,7 +248,7 @@ export const RegistroAcessoTab: React.FC = () => {
       </div>
 
       <p className="text-[11px] text-[#8A907E] text-center">
-        Esta aba é visível apenas para administradores. Registros não podem ser editados ou excluídos.
+        Esta aba é visível apenas para administradores. Itens excluídos podem ser recuperados enquanto o log existir.
       </p>
     </div>
   );

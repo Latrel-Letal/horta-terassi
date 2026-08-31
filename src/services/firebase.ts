@@ -171,6 +171,8 @@ export interface LogAcesso {
   entidade?: 'pedido' | 'cliente' | 'produto' | 'funcionario';
   entidadeId?: string;
   descricao?: string;
+  dadosAntes?: string; // snapshot em JSON do item no momento da exclusão, para permitir recuperação
+  recuperado?: boolean; // marca se este log de exclusão já foi revertido
   timestamp?: any;
 }
 
@@ -204,4 +206,33 @@ export async function loadLogsPorData(dataISO: string): Promise<LogAcesso[]> {
     console.error('Erro ao carregar logs de acesso:', error);
     return [];
   }
+}
+
+// Marca um log de exclusão como já recuperado (evita recuperar o mesmo item duas vezes)
+export async function marcarLogComoRecuperado(logId: string): Promise<void> {
+  try {
+    await setDoc(doc(db, 'logs_acesso', logId), { recuperado: true }, { merge: true });
+  } catch (error) {
+    console.error('Erro ao marcar log como recuperado:', error);
+  }
+}
+
+// Restaura um pedido excluído a partir do snapshot salvo no log
+export async function restaurarPedido(pedido: Pedido): Promise<void> {
+  await saveFirebasePedido(pedido);
+}
+
+// Restaura um cliente, produto ou funcionário excluído a partir do snapshot salvo no log,
+// devolvendo-o para a lista correspondente no Firestore (horta_data/{chave})
+export async function restaurarItemEmLista<T extends { id?: string; codigo?: string }>(
+  chave: 'clientes' | 'produtos' | 'funcionarios',
+  itemRestaurado: T
+): Promise<void> {
+  const listaAtual = await getOrInitDoc<T[]>(chave, []);
+  const jaExiste = listaAtual.some(item =>
+    (itemRestaurado.id && item.id === itemRestaurado.id) ||
+    (itemRestaurado.codigo && item.codigo === itemRestaurado.codigo)
+  );
+  if (jaExiste) return;
+  await saveDocData(chave, [...listaAtual, itemRestaurado]);
 }

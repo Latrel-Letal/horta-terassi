@@ -56,13 +56,15 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
       const name = isAdmin ? 'Administrador (Tanathus)' : 'Fabricio Inacio Terassi';
       const apelidoFinal = isAdmin ? 'Administrador' : cleanApelido;
 
-      // Registra o login com o apelido de quem está operando nesta sessão
-      registrarLog({
-        email: loggedEmail,
-        apelido: apelidoFinal,
-        tipo: 'login',
-        descricao: `Login realizado por ${apelidoFinal}`,
-      });
+      // Registra o login apenas para usuários que não são ADM
+      if (!isAdmin) {
+        registrarLog({
+          email: loggedEmail,
+          apelido: apelidoFinal,
+          tipo: 'login',
+          descricao: `Login realizado por ${apelidoFinal}`,
+        });
+      }
 
       onLoginSuccess({
         email: loggedEmail,

@@ -313,6 +313,7 @@ export default function App() {
   };
 
   const handleExcluirPedido = (pedidoId: string) => {
+    const pedidoExcluido = pedidos.find(p => p.id === pedidoId);
     setModalSenha({
       isOpen: true,
       mensagem: 'Tem certeza que deseja excluir permanentemente este pedido?',
@@ -332,6 +333,7 @@ export default function App() {
             entidade: 'pedido',
             entidadeId: pedidoId,
             descricao: `Excluiu o pedido ${pedidoId}`,
+            dadosAntes: pedidoExcluido ? JSON.stringify(pedidoExcluido) : undefined,
           });
         } catch (e) {
           console.error(e);
@@ -434,6 +436,7 @@ export default function App() {
             entidade: 'cliente',
             entidadeId: clienteId,
             descricao: `Excluiu o cliente ${c?.apelido || c?.nome || clienteId}`,
+            dadosAntes: c ? JSON.stringify(c) : undefined,
           });
         } catch (e) {
           console.error(e);
@@ -507,6 +510,7 @@ export default function App() {
             entidade: 'produto',
             entidadeId: codigo,
             descricao: `Excluiu o produto ${produtoExcluido?.descricao || codigo}`,
+            dadosAntes: produtoExcluido ? JSON.stringify(produtoExcluido) : undefined,
           });
         } catch (e) {
           console.error(e);
@@ -566,6 +570,7 @@ export default function App() {
             entidade: 'funcionario',
             entidadeId: id,
             descricao: `Excluiu o entregador ${funcExcluido?.nome || id}`,
+            dadosAntes: funcExcluido ? JSON.stringify(funcExcluido) : undefined,
           });
         } catch (e) {
           console.error(e);

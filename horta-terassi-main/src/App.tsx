@@ -1,20 +1,18 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { StorageService } from './services/storage';
 import { Cliente, Funcionario, Pedido, PrecosOverrides, Produto, TransporteConfig } from './types';
-import { hojeISO, fmtMoeda, calcularTotalPedido, getProdutoInfo } from './utils/formatters';
 import { 
   auth, 
   db, 
   isEmailAdmin, 
   isEmailAllowed, 
+  getOrInitDoc, 
   saveDocData, 
+  loadFirebasePedidos, 
   saveFirebasePedido, 
   deleteFirebasePedido, 
   importarPedidosBatch,
-  registrarLog,
-  migrarPedidosLegado,
-  subscribeFirebasePedidos,
-  subscribeDocData
+  registrarLog
 } from './services/firebase';
 import { onAuthStateChanged, signOut } from 'firebase/auth';
 import { doc, onSnapshot, setDoc, serverTimestamp } from 'firebase/firestore';
@@ -54,26 +52,6 @@ export default function App() {
     desde?: any;
     por?: string;
   } | null>(null);
-
-  // Duração do aviso antes do bloqueio de fato entrar em vigor.
-  const AVISO_MANUTENCAO_MS = 30000;
-  // "Relógio" que força recálculo da contagem regressiva a cada segundo
-  // enquanto o modo manutenção estiver ativo.
-  const [manutencaoTick, setManutencaoTick] = useState(() => Date.now());
-  useEffect(() => {
-    if (!manutencaoData?.ativo) return;
-    const intervalId = setInterval(() => setManutencaoTick(Date.now()), 500);
-    return () => clearInterval(intervalId);
-  }, [manutencaoData?.ativo]);
-
-  const manutencaoDesdeMs: number | null = manutencaoData?.desde?.toMillis?.() ?? null;
-  // Se ainda não tem timestamp confirmado pelo servidor (instante logo após
-  // ativar), trata como decorrido = 0 (aviso recém-começou).
-  const manutencaoDecorridoMs = manutencaoData?.ativo
-    ? (manutencaoDesdeMs !== null ? manutencaoTick - manutencaoDesdeMs : 0)
-    : 0;
-  const emAvisoManutencao = !!manutencaoData?.ativo && manutencaoDecorridoMs < AVISO_MANUTENCAO_MS;
-  const segundosRestantesManutencao = Math.max(0, Math.ceil((AVISO_MANUTENCAO_MS - manutencaoDecorridoMs) / 1000));
 
   // Active Tab
   const [activeTab, setActiveTab] = useState<TabType>('pedidos');
@@ -118,74 +96,39 @@ export default function App() {
     setTimeout(() => setToastMessage(null), 2500);
   };
 
-  // Guarda as funções de "desinscrição" das assinaturas em tempo real do
-  // Firebase, para poder encerrá-las no logout/troca de usuário e evitar
-  // vazamento de conexões.
-  const unsubscribersRef = useRef<Array<() => void>>([]);
-
-  const pararSincronizacaoFirebase = useCallback(() => {
-    unsubscribersRef.current.forEach(unsub => unsub());
-    unsubscribersRef.current = [];
-  }, []);
-
-  // Liga a sincronização em tempo real com o Firebase: qualquer alteração
-  // feita por outra pessoa (em outro celular/computador) chega aqui na
-  // hora, sem precisar dar F5. Substitui o antigo carregamento único.
-  const iniciarSincronizacaoFirebase = useCallback(() => {
-    // Evita assinaturas duplicadas caso a função seja chamada mais de uma
-    // vez (ex: login manual + listener de auth disparando em seguida).
-    pararSincronizacaoFirebase();
+  // Carregar todos os dados reais do Firebase
+  const loadFirebaseAllData = useCallback(async () => {
     setLoadingData(true);
+    try {
+      const [pDb, cDb, fDb, prDb, trDb, pedDb] = await Promise.all([
+        getOrInitDoc<Produto[]>('produtos', DEFAULT_PRODUTOS),
+        getOrInitDoc<Cliente[]>('clientes', DEFAULT_CLIENTES),
+        getOrInitDoc<Funcionario[]>('funcionarios', DEFAULT_FUNCIONARIOS),
+        getOrInitDoc<PrecosOverrides>('precos', {}),
+        getOrInitDoc<TransporteConfig>('transporte', DEFAULT_TRANSPORTE),
+        loadFirebasePedidos()
+      ]);
 
-    // Migração de pedidos do formato antigo só precisa rodar uma vez.
-    migrarPedidosLegado().catch(e => console.error('Erro na migração de pedidos legados:', e));
-
-    let pendentes = 6;
-    const marcarCarregado = () => {
-      pendentes = Math.max(0, pendentes - 1);
-      if (pendentes === 0) setLoadingData(false);
-    };
-
-    unsubscribersRef.current = [
-      subscribeDocData<Produto[]>('produtos', DEFAULT_PRODUTOS, data => {
-        setProdutos(data);
-        StorageService.saveProdutos(data);
-        marcarCarregado();
-      }),
-      subscribeDocData<Cliente[]>('clientes', DEFAULT_CLIENTES, data => {
-        setClientes(data);
-        StorageService.saveClientes(data);
-        marcarCarregado();
-      }),
-      subscribeDocData<Funcionario[]>('funcionarios', DEFAULT_FUNCIONARIOS, data => {
-        setFuncionarios(data);
-        StorageService.saveFuncionarios(data);
-        marcarCarregado();
-      }),
-      subscribeDocData<PrecosOverrides>('precos', {}, data => {
-        setPrecosOverrides(data);
-        StorageService.savePrecosOverrides(data);
-        marcarCarregado();
-      }),
-      subscribeDocData<TransporteConfig>('transporte', DEFAULT_TRANSPORTE, data => {
-        setTransporteConfig(data);
-        StorageService.saveTransporte(data);
-        marcarCarregado();
-      }),
-      subscribeFirebasePedidos(data => {
-        setPedidos(data);
-        StorageService.savePedidos(data);
-        marcarCarregado();
-      }),
-    ];
-  }, [pararSincronizacaoFirebase]);
+      if (pDb) { setProdutos(pDb); StorageService.saveProdutos(pDb); }
+      if (cDb) { setClientes(cDb); StorageService.saveClientes(cDb); }
+      if (fDb) { setFuncionarios(fDb); StorageService.saveFuncionarios(fDb); }
+      if (prDb) { setPrecosOverrides(prDb); StorageService.savePrecosOverrides(prDb); }
+      if (trDb) { setTransporteConfig(trDb); StorageService.saveTransporte(trDb); }
+      if (pedDb) { setPedidos(pedDb); StorageService.savePedidos(pedDb); }
+    } catch (e) {
+      console.error('Erro ao sincronizar dados com o Firebase:', e);
+      showToast('Aviso: usando dados em cache local.');
+    } finally {
+      setLoadingData(false);
+    }
+  }, []);
 
   // Firebase Auth State Listener
   useEffect(() => {
     const unsubAuth = onAuthStateChanged(auth, async (fbUser) => {
       if (fbUser && fbUser.email && isEmailAllowed(fbUser.email)) {
         const isAdmin = isEmailAdmin(fbUser.email);
-        const apelidoSalvo = localStorage.getItem('horta_apelido') || (isAdmin ? 'Administrador' : 'Desconhecido');
+        const apelidoSalvo = sessionStorage.getItem('horta_apelido') || (isAdmin ? 'Administrador' : 'Desconhecido');
         const loggedUser = {
           email: fbUser.email,
           name: isAdmin ? 'Administrador (Tanathus)' : 'Fabricio Inacio Terassi',
@@ -193,12 +136,11 @@ export default function App() {
         };
         setUser(loggedUser);
         StorageService.saveAuthUser(loggedUser);
-        iniciarSincronizacaoFirebase();
+        await loadFirebaseAllData();
       } else {
         if (fbUser) {
           await signOut(auth);
         }
-        pararSincronizacaoFirebase();
         setUser(null);
         StorageService.saveAuthUser(null);
       }
@@ -217,30 +159,25 @@ export default function App() {
     return () => {
       unsubAuth();
       unsubManut();
-      pararSincronizacaoFirebase();
     };
-  }, [iniciarSincronizacaoFirebase, pararSincronizacaoFirebase]);
+  }, [loadFirebaseAllData]);
 
   // Auth handlers
-  const handleLoginSuccess = (loggedUser: { email: string; name: string; apelido: string }) => {
-    // Guardamos no localStorage (não sessionStorage) para o apelido
-    // sobreviver a fechamentos de aba/navegador, já que a sessão do
-    // Firebase Auth também é lembrada automaticamente pelo navegador.
-    localStorage.setItem('horta_apelido', loggedUser.apelido);
+  const handleLoginSuccess = async (loggedUser: { email: string; name: string; apelido: string }) => {
+    sessionStorage.setItem('horta_apelido', loggedUser.apelido);
     setUser(loggedUser);
     StorageService.saveAuthUser(loggedUser);
     showToast(`Bem-vindo, ${loggedUser.name}!`);
-    iniciarSincronizacaoFirebase();
+    await loadFirebaseAllData();
   };
 
   const handleLogout = async () => {
-    pararSincronizacaoFirebase();
     try {
       await signOut(auth);
     } catch (e) {
       console.error(e);
     }
-    localStorage.removeItem('horta_apelido');
+    sessionStorage.removeItem('horta_apelido');
     setUser(null);
     StorageService.saveAuthUser(null);
   };
@@ -255,8 +192,8 @@ export default function App() {
 
     const ativoAtual = !!manutencaoData?.ativo;
     const confirmMsg = !ativoAtual
-      ? 'Deseja ATIVAR o Modo Manutenção? Os usuários verão um aviso com contagem de 30 segundos antes do acesso ser bloqueado.'
-      : 'Deseja DESATIVAR o Modo Manutenção e liberar o acesso a todos os usuários imediatamente?';
+      ? 'Deseja ATIVAR o Modo Manutenção? Isso bloqueará o acesso para usuários não-administradores.'
+      : 'Deseja DESATIVAR o Modo Manutenção e liberar o acesso a todos os usuários?';
 
     if (!window.confirm(confirmMsg)) return;
 
@@ -272,25 +209,6 @@ export default function App() {
       showToast('Erro ao atualizar modo manutenção no Firebase.');
     }
   };
-
-  // Helpers para descrições legíveis no Registro de Acesso (em vez de IDs crus)
-  const nomeClienteById = useCallback(
-    (clienteId?: string) => {
-      if (!clienteId) return 'cliente desconhecido';
-      const c = clientes.find(x => x.id === clienteId);
-      return c?.apelido || c?.nome || clienteId;
-    },
-    [clientes]
-  );
-
-  const resumoPedido = useCallback(
-    (pedido: Pedido) => {
-      const nItens = pedido.itens?.length || 0;
-      const total = calcularTotalPedido(pedido, produtos, precosOverrides);
-      return `${nomeClienteById(pedido.clienteId)} (${nItens} ite${nItens === 1 ? 'm' : 'ns'}, ${fmtMoeda(total)})`;
-    },
-    [nomeClienteById, produtos, precosOverrides]
-  );
 
   // Pedidos Handlers
   const handleSalvarPedido = async (pedidoData: Omit<Pedido, 'id'>) => {
@@ -314,7 +232,7 @@ export default function App() {
           tipo: 'edicao',
           entidade: 'pedido',
           entidadeId: atualizado.id,
-          descricao: `Editou o pedido de ${resumoPedido(atualizado)}`,
+          descricao: `Editou o pedido do cliente ${atualizado.clienteId}`,
         });
       } catch (e) {
         console.error(e);
@@ -337,7 +255,7 @@ export default function App() {
           tipo: 'criacao',
           entidade: 'pedido',
           entidadeId: novoPedido.id,
-          descricao: `Lançou novo pedido para ${resumoPedido(novoPedido)}`,
+          descricao: `Lançou novo pedido para o cliente ${novoPedido.clienteId}`,
         });
       } catch (e) {
         console.error(e);
@@ -346,7 +264,7 @@ export default function App() {
   };
 
   const handleEntregarPedido = async (pedidoId: string) => {
-    const hoje = hojeISO();
+    const hoje = new Date().toISOString().slice(0, 10);
     const atualizado = pedidos.find(p => p.id === pedidoId);
     if (!atualizado) return;
 
@@ -365,7 +283,7 @@ export default function App() {
         tipo: 'edicao',
         entidade: 'pedido',
         entidadeId: pedidoId,
-        descricao: `Marcou como entregue o pedido de ${resumoPedido(modificado)}`,
+        descricao: `Marcou o pedido ${pedidoId} como entregue`,
       });
     } catch (e) {
       console.error(e);
@@ -391,7 +309,7 @@ export default function App() {
           tipo: 'edicao',
           entidade: 'pedido',
           entidadeId: pedidoId,
-          descricao: `Reabriu o pedido de ${resumoPedido(modificado)} (voltou para pendente)`,
+          descricao: `Reabriu o pedido ${pedidoId} (voltou para pendente)`,
         });
       } catch (e) {
         console.error(e);
@@ -419,7 +337,7 @@ export default function App() {
             tipo: 'exclusao',
             entidade: 'pedido',
             entidadeId: pedidoId,
-            descricao: `Excluiu o pedido de ${pedidoExcluido ? resumoPedido(pedidoExcluido) : pedidoId}`,
+            descricao: `Excluiu o pedido ${pedidoId}`,
             dadosAntes: pedidoExcluido ? JSON.stringify(pedidoExcluido) : undefined,
           });
         } catch (e) {
@@ -451,7 +369,7 @@ export default function App() {
         tipo: 'edicao',
         entidade: 'pedido',
         entidadeId: pedidoId,
-        descricao: `Atualizou perda/devolução de ${getProdutoInfo(codigoProduto, produtos).descricao} (qtd: ${qtd}) no pedido de ${nomeClienteById(target.clienteId)}`,
+        descricao: `Atualizou perda/devolução do produto ${codigoProduto} (qtd: ${qtd}) no pedido ${pedidoId}`,
       });
     } catch (e) {
       console.error(e);
@@ -751,8 +669,7 @@ export default function App() {
 
   const pedidosPendentesCount = pedidos.filter(p => p.status === 'pendente').length;
   const isAdmin = user ? isEmailAdmin(user.email) : false;
-  // O bloqueio de fato só entra em vigor depois que o aviso de 30s termina.
-  const isManutencaoBloqueante = !!manutencaoData?.ativo && !isAdmin && !emAvisoManutencao;
+  const isManutencaoBloqueante = !!manutencaoData?.ativo && !isAdmin;
 
   if (authLoading) {
     return (
@@ -771,16 +688,6 @@ export default function App() {
 
   return (
     <div className="min-h-screen bg-[#EEF1E9] text-[#1B2420] relative">
-      {/* Aviso de manutenção com contagem regressiva de 30s (não bloqueia o uso ainda) */}
-      {emAvisoManutencao && (
-        <div className="fixed top-0 inset-x-0 z-50 bg-[#C08A2E] text-white text-center py-3 px-4 shadow-lg flex items-center justify-center gap-2">
-          <Wrench className="w-4 h-4 flex-shrink-0" />
-          <p className="text-sm font-semibold m-0">
-            Atenção: o site entrará em manutenção em {segundosRestantesManutencao}s. Finalize e salve o que estiver fazendo.
-          </p>
-        </div>
-      )}
-
       {/* Maintenance Fullscreen Overlay for non-admins when maintenance is active */}
       {isManutencaoBloqueante && (
         <div className="fixed inset-0 z-50 bg-[#EEF1E9] flex items-center justify-center p-6 text-center">
@@ -806,7 +713,7 @@ export default function App() {
         </div>
       )}
 
-      <div className={`max-w-5xl mx-auto px-4 sm:px-6 py-6 pb-20 ${emAvisoManutencao ? 'pt-16' : ''}`}>
+      <div className="max-w-5xl mx-auto px-4 sm:px-6 py-6 pb-20">
         {/* App Header */}
         <Header
           user={user}
@@ -824,7 +731,7 @@ export default function App() {
           clientes={clientes}
           onMarcarRetiradoHoje={cid =>
             handleUpdateClienteField(cid, {
-              ultimaRetiradaRelatorio: hojeISO(),
+              ultimaRetiradaRelatorio: new Date().toISOString().slice(0, 10),
             })
           }
         />

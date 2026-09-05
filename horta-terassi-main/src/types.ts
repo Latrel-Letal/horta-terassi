@@ -25,6 +25,7 @@ export interface ItemPedido {
   codigo: string; // código do produto ou 'DESC:...'
   quantidade: number;
   precoUnit?: number; // Preço congelado no momento do lançamento
+  emPromocao?: boolean; // true quando precoUnit veio de uma promoção ativa do dia
 }
 
 export interface Pedido {
@@ -76,7 +77,6 @@ export interface RelatorioVendasClienteGrupo {
 }
 
 // Promoção lançada pelo bot de WhatsApp, gravada na coleção "promocoes"
-
 export interface Promocao {
   id: string;
   mercado: string; // nome do cliente/mercado, igual ao cadastro em "Clientes"

@@ -97,11 +97,10 @@ export async function saveDocData<T>(key: string, data: T): Promise<void> {
   }
 }
 
-// Migra pedidos do formato legado (array em horta_data/pedidos) para a
-// subcoleção horta_data/pedidos/items, caso ainda existam nesse formato.
-// Deve ser chamada uma vez antes de assinar a subcoleção em tempo real.
-export async function migrarPedidosLegado(): Promise<void> {
+// Carregamento de pedidos da subcoleção horta_data/pedidos/items
+export async function loadFirebasePedidos(): Promise<Pedido[]> {
   try {
+    // 1. Verificar se há dados no formato legado (array em horta_data/pedidos)
     const legacyRef = doc(db, 'horta_data', 'pedidos');
     const legacySnap = await getDoc(legacyRef);
     if (legacySnap.exists() && legacySnap.data() && Array.isArray(legacySnap.data()?.value) && legacySnap.data()?.value.length) {
@@ -118,17 +117,8 @@ export async function migrarPedidosLegado(): Promise<void> {
       }
       await setDoc(legacyRef, { value: [], migrado: true });
     }
-  } catch (error) {
-    console.error('Erro ao migrar pedidos legados no Firebase:', error);
-  }
-}
 
-// Carregamento (uma única vez) de pedidos da subcoleção horta_data/pedidos/items.
-// Mantido para compatibilidade (ex: rotinas de exportação/backup); a tela
-// principal agora usa subscribeFirebasePedidos para ficar em tempo real.
-export async function loadFirebasePedidos(): Promise<Pedido[]> {
-  try {
-    await migrarPedidosLegado();
+    // 2. Carregar todos os documentos da subcoleção
     const itemsCol = collection(db, 'horta_data', 'pedidos', 'items');
     const snapshot = await getDocs(itemsCol);
     return snapshot.docs.map(d => ({ ...(d.data() as Pedido), id: d.id }));
@@ -136,52 +126,6 @@ export async function loadFirebasePedidos(): Promise<Pedido[]> {
     console.error('Erro ao carregar pedidos do Firebase:', error);
     return [];
   }
-}
-
-// Ouve em tempo real a subcoleção de pedidos. Qualquer criação, edição ou
-// exclusão feita por outra pessoa (em outro dispositivo/aba) chega aqui
-// automaticamente, sem precisar de F5. Retorna a função de unsubscribe.
-export function subscribeFirebasePedidos(callback: (pedidos: Pedido[]) => void): () => void {
-  const itemsCol = collection(db, 'horta_data', 'pedidos', 'items');
-  return onSnapshot(
-    itemsCol,
-    snapshot => {
-      const pedidos = snapshot.docs.map(d => ({ ...(d.data() as Pedido), id: d.id }));
-      callback(pedidos);
-    },
-    error => {
-      console.error('Erro ao ouvir pedidos do Firebase em tempo real:', error);
-    }
-  );
-}
-
-// Ouve em tempo real um documento simples em horta_data/{key} (ex: produtos,
-// clientes, funcionarios, precos, transporte). Substitui getOrInitDoc nas
-// telas que precisam refletir mudanças feitas por outras pessoas na hora.
-export function subscribeDocData<T>(
-  key: string,
-  defaultValue: T,
-  callback: (data: T) => void
-): () => void {
-  const docRef = doc(db, 'horta_data', key);
-  return onSnapshot(
-    docRef,
-    snap => {
-      if (snap.exists()) {
-        const data = snap.data();
-        if (data && 'value' in data) {
-          callback(data.value as T);
-        } else {
-          callback(data as T);
-        }
-      } else {
-        callback(defaultValue);
-      }
-    },
-    error => {
-      console.error(`Erro ao ouvir doc ${key} do Firebase em tempo real:`, error);
-    }
-  );
 }
 
 export async function saveFirebasePedido(pedido: Pedido): Promise<void> {

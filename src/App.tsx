@@ -1,17 +1,20 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { StorageService } from './services/storage';
 import { Cliente, Funcionario, Pedido, PrecosOverrides, Produto, TransporteConfig } from './types';
+import { hojeISO, fmtMoeda, calcularTotalPedido, getProdutoInfo } from './utils/formatters';
 import { 
   auth, 
   db, 
   isEmailAdmin, 
   isEmailAllowed, 
-  getOrInitDoc, 
   saveDocData, 
-  loadFirebasePedidos, 
   saveFirebasePedido, 
   deleteFirebasePedido, 
-  importarPedidosBatch 
+  importarPedidosBatch,
+  registrarLog,
+  migrarPedidosLegado,
+  subscribeFirebasePedidos,
+  subscribeDocData
 } from './services/firebase';
 import { onAuthStateChanged, signOut } from 'firebase/auth';
 import { doc, onSnapshot, setDoc, serverTimestamp } from 'firebase/firestore';
@@ -28,19 +31,21 @@ import { PerdasTab } from './components/PerdasTab';
 import { RelatorioMercadoTab } from './components/RelatorioMercadoTab';
 import { RelatorioProdutosTab } from './components/RelatorioProdutosTab';
 import { ImportarTab } from './components/ImportarTab';
+import { RegistroAcessoTab } from './components/RegistroAcessoTab';
 import { ModalFichaNota } from './components/ModalFichaNota';
 import { ModalClienteForm } from './components/ModalClienteForm';
 import { ModalPrecosCliente } from './components/ModalPrecosCliente';
 import { ModalConfirmacaoSenha } from './components/ModalConfirmacaoSenha';
 import { Toast } from './components/Toast';
 import { LoginScreen } from './components/LoginScreen';
+import { usePromocaoDoDia } from './hooks/usePromocaoDoDia';
 import { Wrench, ShieldAlert, AlertCircle } from 'lucide-react';
 import { DEFAULT_CLIENTES, DEFAULT_PRODUTOS, DEFAULT_FUNCIONARIOS, DEFAULT_TRANSPORTE } from './constants/initialData';
 import { imprimirCupomTermico } from './utils/print';
 
 export default function App() {
   // Auth State
-  const [user, setUser] = useState<{ email: string; name: string } | null>(null);
+  const [user, setUser] = useState<{ email: string; name: string; apelido: string } | null>(null);
   const [authLoading, setAuthLoading] = useState(true);
 
   // Maintenance State (realtime from Firebase)
@@ -49,6 +54,26 @@ export default function App() {
     desde?: any;
     por?: string;
   } | null>(null);
+
+  // Duração do aviso antes do bloqueio de fato entrar em vigor.
+  const AVISO_MANUTENCAO_MS = 30000;
+  // "Relógio" que força recálculo da contagem regressiva a cada segundo
+  // enquanto o modo manutenção estiver ativo.
+  const [manutencaoTick, setManutencaoTick] = useState(() => Date.now());
+  useEffect(() => {
+    if (!manutencaoData?.ativo) return;
+    const intervalId = setInterval(() => setManutencaoTick(Date.now()), 500);
+    return () => clearInterval(intervalId);
+  }, [manutencaoData?.ativo]);
+
+  const manutencaoDesdeMs: number | null = manutencaoData?.desde?.toMillis?.() ?? null;
+  // Se ainda não tem timestamp confirmado pelo servidor (instante logo após
+  // ativar), trata como decorrido = 0 (aviso recém-começou).
+  const manutencaoDecorridoMs = manutencaoData?.ativo
+    ? (manutencaoDesdeMs !== null ? manutencaoTick - manutencaoDesdeMs : 0)
+    : 0;
+  const emAvisoManutencao = !!manutencaoData?.ativo && manutencaoDecorridoMs < AVISO_MANUTENCAO_MS;
+  const segundosRestantesManutencao = Math.max(0, Math.ceil((AVISO_MANUTENCAO_MS - manutencaoDecorridoMs) / 1000));
 
   // Active Tab
   const [activeTab, setActiveTab] = useState<TabType>('pedidos');
@@ -61,6 +86,10 @@ export default function App() {
   const [precosOverrides, setPrecosOverrides] = useState<PrecosOverrides>(() => StorageService.getPrecosOverrides());
   const [transporteConfig, setTransporteConfig] = useState<TransporteConfig>(() => StorageService.getTransporte());
   const [loadingData, setLoadingData] = useState(false);
+
+  // Promoções ativas do dia (lançadas pelo bot de WhatsApp), já cruzadas
+  // com os cadastros de clientes e produtos
+  const { getPromocaoPara, getPromocoesDoProduto } = usePromocaoDoDia(clientes, produtos);
 
   // Modals & Active Edit States
   const [pedidoEmEdicao, setPedidoEmEdicao] = useState<Pedido | null>(null);
@@ -89,49 +118,87 @@ export default function App() {
     setTimeout(() => setToastMessage(null), 2500);
   };
 
-  // Carregar todos os dados reais do Firebase
-  const loadFirebaseAllData = useCallback(async () => {
-    setLoadingData(true);
-    try {
-      const [pDb, cDb, fDb, prDb, trDb, pedDb] = await Promise.all([
-        getOrInitDoc<Produto[]>('produtos', DEFAULT_PRODUTOS),
-        getOrInitDoc<Cliente[]>('clientes', DEFAULT_CLIENTES),
-        getOrInitDoc<Funcionario[]>('funcionarios', DEFAULT_FUNCIONARIOS),
-        getOrInitDoc<PrecosOverrides>('precos', {}),
-        getOrInitDoc<TransporteConfig>('transporte', DEFAULT_TRANSPORTE),
-        loadFirebasePedidos()
-      ]);
+  // Guarda as funções de "desinscrição" das assinaturas em tempo real do
+  // Firebase, para poder encerrá-las no logout/troca de usuário e evitar
+  // vazamento de conexões.
+  const unsubscribersRef = useRef<Array<() => void>>([]);
 
-      if (pDb) { setProdutos(pDb); StorageService.saveProdutos(pDb); }
-      if (cDb) { setClientes(cDb); StorageService.saveClientes(cDb); }
-      if (fDb) { setFuncionarios(fDb); StorageService.saveFuncionarios(fDb); }
-      if (prDb) { setPrecosOverrides(prDb); StorageService.savePrecosOverrides(prDb); }
-      if (trDb) { setTransporteConfig(trDb); StorageService.saveTransporte(trDb); }
-      if (pedDb) { setPedidos(pedDb); StorageService.savePedidos(pedDb); }
-    } catch (e) {
-      console.error('Erro ao sincronizar dados com o Firebase:', e);
-      showToast('Aviso: usando dados em cache local.');
-    } finally {
-      setLoadingData(false);
-    }
+  const pararSincronizacaoFirebase = useCallback(() => {
+    unsubscribersRef.current.forEach(unsub => unsub());
+    unsubscribersRef.current = [];
   }, []);
+
+  // Liga a sincronização em tempo real com o Firebase: qualquer alteração
+  // feita por outra pessoa (em outro celular/computador) chega aqui na
+  // hora, sem precisar dar F5. Substitui o antigo carregamento único.
+  const iniciarSincronizacaoFirebase = useCallback(() => {
+    // Evita assinaturas duplicadas caso a função seja chamada mais de uma
+    // vez (ex: login manual + listener de auth disparando em seguida).
+    pararSincronizacaoFirebase();
+    setLoadingData(true);
+
+    // Migração de pedidos do formato antigo só precisa rodar uma vez.
+    migrarPedidosLegado().catch(e => console.error('Erro na migração de pedidos legados:', e));
+
+    let pendentes = 6;
+    const marcarCarregado = () => {
+      pendentes = Math.max(0, pendentes - 1);
+      if (pendentes === 0) setLoadingData(false);
+    };
+
+    unsubscribersRef.current = [
+      subscribeDocData<Produto[]>('produtos', DEFAULT_PRODUTOS, data => {
+        setProdutos(data);
+        StorageService.saveProdutos(data);
+        marcarCarregado();
+      }),
+      subscribeDocData<Cliente[]>('clientes', DEFAULT_CLIENTES, data => {
+        setClientes(data);
+        StorageService.saveClientes(data);
+        marcarCarregado();
+      }),
+      subscribeDocData<Funcionario[]>('funcionarios', DEFAULT_FUNCIONARIOS, data => {
+        setFuncionarios(data);
+        StorageService.saveFuncionarios(data);
+        marcarCarregado();
+      }),
+      subscribeDocData<PrecosOverrides>('precos', {}, data => {
+        setPrecosOverrides(data);
+        StorageService.savePrecosOverrides(data);
+        marcarCarregado();
+      }),
+      subscribeDocData<TransporteConfig>('transporte', DEFAULT_TRANSPORTE, data => {
+        setTransporteConfig(data);
+        StorageService.saveTransporte(data);
+        marcarCarregado();
+      }),
+      subscribeFirebasePedidos(data => {
+        setPedidos(data);
+        StorageService.savePedidos(data);
+        marcarCarregado();
+      }),
+    ];
+  }, [pararSincronizacaoFirebase]);
 
   // Firebase Auth State Listener
   useEffect(() => {
     const unsubAuth = onAuthStateChanged(auth, async (fbUser) => {
       if (fbUser && fbUser.email && isEmailAllowed(fbUser.email)) {
         const isAdmin = isEmailAdmin(fbUser.email);
+        const apelidoSalvo = localStorage.getItem('horta_apelido') || (isAdmin ? 'Administrador' : 'Desconhecido');
         const loggedUser = {
           email: fbUser.email,
-          name: isAdmin ? 'Administrador (Tanathus)' : 'Fabricio Inacio Terassi'
+          name: isAdmin ? 'Administrador (Tanathus)' : 'Fabricio Inacio Terassi',
+          apelido: apelidoSalvo,
         };
         setUser(loggedUser);
         StorageService.saveAuthUser(loggedUser);
-        await loadFirebaseAllData();
+        iniciarSincronizacaoFirebase();
       } else {
         if (fbUser) {
           await signOut(auth);
         }
+        pararSincronizacaoFirebase();
         setUser(null);
         StorageService.saveAuthUser(null);
       }
@@ -150,23 +217,30 @@ export default function App() {
     return () => {
       unsubAuth();
       unsubManut();
+      pararSincronizacaoFirebase();
     };
-  }, [loadFirebaseAllData]);
+  }, [iniciarSincronizacaoFirebase, pararSincronizacaoFirebase]);
 
   // Auth handlers
-  const handleLoginSuccess = async (loggedUser: { email: string; name: string }) => {
+  const handleLoginSuccess = (loggedUser: { email: string; name: string; apelido: string }) => {
+    // Guardamos no localStorage (não sessionStorage) para o apelido
+    // sobreviver a fechamentos de aba/navegador, já que a sessão do
+    // Firebase Auth também é lembrada automaticamente pelo navegador.
+    localStorage.setItem('horta_apelido', loggedUser.apelido);
     setUser(loggedUser);
     StorageService.saveAuthUser(loggedUser);
     showToast(`Bem-vindo, ${loggedUser.name}!`);
-    await loadFirebaseAllData();
+    iniciarSincronizacaoFirebase();
   };
 
   const handleLogout = async () => {
+    pararSincronizacaoFirebase();
     try {
       await signOut(auth);
     } catch (e) {
       console.error(e);
     }
+    localStorage.removeItem('horta_apelido');
     setUser(null);
     StorageService.saveAuthUser(null);
   };
@@ -181,8 +255,8 @@ export default function App() {
 
     const ativoAtual = !!manutencaoData?.ativo;
     const confirmMsg = !ativoAtual
-      ? 'Deseja ATIVAR o Modo Manutenção? Isso bloqueará o acesso para usuários não-administradores.'
-      : 'Deseja DESATIVAR o Modo Manutenção e liberar o acesso a todos os usuários?';
+      ? 'Deseja ATIVAR o Modo Manutenção? Os usuários verão um aviso com contagem de 30 segundos antes do acesso ser bloqueado.'
+      : 'Deseja DESATIVAR o Modo Manutenção e liberar o acesso a todos os usuários imediatamente?';
 
     if (!window.confirm(confirmMsg)) return;
 
@@ -198,6 +272,25 @@ export default function App() {
       showToast('Erro ao atualizar modo manutenção no Firebase.');
     }
   };
+
+  // Helpers para descrições legíveis no Registro de Acesso (em vez de IDs crus)
+  const nomeClienteById = useCallback(
+    (clienteId?: string) => {
+      if (!clienteId) return 'cliente desconhecido';
+      const c = clientes.find(x => x.id === clienteId);
+      return c?.apelido || c?.nome || clienteId;
+    },
+    [clientes]
+  );
+
+  const resumoPedido = useCallback(
+    (pedido: Pedido) => {
+      const nItens = pedido.itens?.length || 0;
+      const total = calcularTotalPedido(pedido, produtos, precosOverrides);
+      return `${nomeClienteById(pedido.clienteId)} (${nItens} ite${nItens === 1 ? 'm' : 'ns'}, ${fmtMoeda(total)})`;
+    },
+    [nomeClienteById, produtos, precosOverrides]
+  );
 
   // Pedidos Handlers
   const handleSalvarPedido = async (pedidoData: Omit<Pedido, 'id'>) => {
@@ -215,6 +308,14 @@ export default function App() {
       showToast('Pedido atualizado com sucesso!');
       try {
         await saveFirebasePedido(atualizado);
+        registrarLog({
+          email: user?.email || '',
+          apelido: user?.apelido || 'Desconhecido',
+          tipo: 'edicao',
+          entidade: 'pedido',
+          entidadeId: atualizado.id,
+          descricao: `Editou o pedido de ${resumoPedido(atualizado)}`,
+        });
       } catch (e) {
         console.error(e);
       }
@@ -230,6 +331,14 @@ export default function App() {
       showToast('Novo pedido lançado com sucesso!');
       try {
         await saveFirebasePedido(novoPedido);
+        registrarLog({
+          email: user?.email || '',
+          apelido: user?.apelido || 'Desconhecido',
+          tipo: 'criacao',
+          entidade: 'pedido',
+          entidadeId: novoPedido.id,
+          descricao: `Lançou novo pedido para ${resumoPedido(novoPedido)}`,
+        });
       } catch (e) {
         console.error(e);
       }
@@ -237,7 +346,7 @@ export default function App() {
   };
 
   const handleEntregarPedido = async (pedidoId: string) => {
-    const hoje = new Date().toISOString().slice(0, 10);
+    const hoje = hojeISO();
     const atualizado = pedidos.find(p => p.id === pedidoId);
     if (!atualizado) return;
 
@@ -250,6 +359,14 @@ export default function App() {
 
     try {
       await saveFirebasePedido(modificado);
+      registrarLog({
+        email: user?.email || '',
+        apelido: user?.apelido || 'Desconhecido',
+        tipo: 'edicao',
+        entidade: 'pedido',
+        entidadeId: pedidoId,
+        descricao: `Marcou como entregue o pedido de ${resumoPedido(modificado)}`,
+      });
     } catch (e) {
       console.error(e);
     }
@@ -268,6 +385,14 @@ export default function App() {
 
       try {
         await saveFirebasePedido(modificado);
+        registrarLog({
+          email: user?.email || '',
+          apelido: user?.apelido || 'Desconhecido',
+          tipo: 'edicao',
+          entidade: 'pedido',
+          entidadeId: pedidoId,
+          descricao: `Reabriu o pedido de ${resumoPedido(modificado)} (voltou para pendente)`,
+        });
       } catch (e) {
         console.error(e);
       }
@@ -275,6 +400,7 @@ export default function App() {
   };
 
   const handleExcluirPedido = (pedidoId: string) => {
+    const pedidoExcluido = pedidos.find(p => p.id === pedidoId);
     setModalSenha({
       isOpen: true,
       mensagem: 'Tem certeza que deseja excluir permanentemente este pedido?',
@@ -287,6 +413,15 @@ export default function App() {
 
         try {
           await deleteFirebasePedido(pedidoId);
+          registrarLog({
+            email: user?.email || '',
+            apelido: user?.apelido || 'Desconhecido',
+            tipo: 'exclusao',
+            entidade: 'pedido',
+            entidadeId: pedidoId,
+            descricao: `Excluiu o pedido de ${pedidoExcluido ? resumoPedido(pedidoExcluido) : pedidoId}`,
+            dadosAntes: pedidoExcluido ? JSON.stringify(pedidoExcluido) : undefined,
+          });
         } catch (e) {
           console.error(e);
         }
@@ -310,6 +445,14 @@ export default function App() {
 
     try {
       await saveFirebasePedido(modificado);
+      registrarLog({
+        email: user?.email || '',
+        apelido: user?.apelido || 'Desconhecido',
+        tipo: 'edicao',
+        entidade: 'pedido',
+        entidadeId: pedidoId,
+        descricao: `Atualizou perda/devolução de ${getProdutoInfo(codigoProduto, produtos).descricao} (qtd: ${qtd}) no pedido de ${nomeClienteById(target.clienteId)}`,
+      });
     } catch (e) {
       console.error(e);
     }
@@ -319,6 +462,7 @@ export default function App() {
   const handleSalvarCliente = async (cliente: Cliente) => {
     let atualizados: Cliente[];
     const idx = clientes.findIndex(c => c.id === cliente.id);
+    const isNovo = idx < 0;
     if (idx >= 0) {
       atualizados = [...clientes];
       atualizados[idx] = cliente;
@@ -331,6 +475,14 @@ export default function App() {
 
     try {
       await saveDocData('clientes', atualizados);
+      registrarLog({
+        email: user?.email || '',
+        apelido: user?.apelido || 'Desconhecido',
+        tipo: isNovo ? 'criacao' : 'edicao',
+        entidade: 'cliente',
+        entidadeId: cliente.id,
+        descricao: `${isNovo ? 'Cadastrou' : 'Editou'} o cliente ${cliente.apelido || cliente.nome}`,
+      });
     } catch (e) {
       console.error(e);
     }
@@ -364,6 +516,15 @@ export default function App() {
         try {
           await saveDocData('clientes', novosClientes);
           await saveDocData('funcionarios', novosFuncionarios);
+          registrarLog({
+            email: user?.email || '',
+            apelido: user?.apelido || 'Desconhecido',
+            tipo: 'exclusao',
+            entidade: 'cliente',
+            entidadeId: clienteId,
+            descricao: `Excluiu o cliente ${c?.apelido || c?.nome || clienteId}`,
+            dadosAntes: c ? JSON.stringify(c) : undefined,
+          });
         } catch (e) {
           console.error(e);
         }
@@ -389,6 +550,7 @@ export default function App() {
     let atualizados: Produto[];
     const key = produto.codigo || `DESC:${produto.descricao}`;
     const idx = produtos.findIndex(p => (p.codigo || `DESC:${p.descricao}`) === key);
+    const isNovo = idx < 0;
     if (idx >= 0) {
       atualizados = [...produtos];
       atualizados[idx] = produto;
@@ -401,6 +563,14 @@ export default function App() {
 
     try {
       await saveDocData('produtos', atualizados);
+      registrarLog({
+        email: user?.email || '',
+        apelido: user?.apelido || 'Desconhecido',
+        tipo: isNovo ? 'criacao' : 'edicao',
+        entidade: 'produto',
+        entidadeId: key,
+        descricao: `${isNovo ? 'Cadastrou' : 'Editou'} o produto ${produto.descricao}`,
+      });
     } catch (e) {
       console.error(e);
     }
@@ -411,6 +581,7 @@ export default function App() {
       isOpen: true,
       mensagem: 'Deseja excluir este produto do catálogo? Pedidos já emitidos permanecerão com seus valores congelados.',
       onConfirm: async () => {
+        const produtoExcluido = produtos.find(p => (p.codigo || `DESC:${p.descricao}`) === codigo);
         const filtrados = produtos.filter(p => (p.codigo || `DESC:${p.descricao}`) !== codigo);
         setProdutos(filtrados);
         StorageService.saveProdutos(filtrados);
@@ -419,6 +590,15 @@ export default function App() {
 
         try {
           await saveDocData('produtos', filtrados);
+          registrarLog({
+            email: user?.email || '',
+            apelido: user?.apelido || 'Desconhecido',
+            tipo: 'exclusao',
+            entidade: 'produto',
+            entidadeId: codigo,
+            descricao: `Excluiu o produto ${produtoExcluido?.descricao || codigo}`,
+            dadosAntes: produtoExcluido ? JSON.stringify(produtoExcluido) : undefined,
+          });
         } catch (e) {
           console.error(e);
         }
@@ -430,6 +610,7 @@ export default function App() {
   const handleSalvarFuncionario = async (func: Funcionario) => {
     let atualizados: Funcionario[];
     const idx = funcionarios.findIndex(f => f.id === func.id);
+    const isNovo = idx < 0;
     if (idx >= 0) {
       atualizados = [...funcionarios];
       atualizados[idx] = func;
@@ -442,6 +623,14 @@ export default function App() {
 
     try {
       await saveDocData('funcionarios', atualizados);
+      registrarLog({
+        email: user?.email || '',
+        apelido: user?.apelido || 'Desconhecido',
+        tipo: isNovo ? 'criacao' : 'edicao',
+        entidade: 'funcionario',
+        entidadeId: func.id,
+        descricao: `${isNovo ? 'Cadastrou' : 'Editou'} o entregador ${func.nome}`,
+      });
     } catch (e) {
       console.error(e);
     }
@@ -452,6 +641,7 @@ export default function App() {
       isOpen: true,
       mensagem: 'Deseja excluir este entregador da equipe?',
       onConfirm: async () => {
+        const funcExcluido = funcionarios.find(f => f.id === id);
         const filtrados = funcionarios.filter(f => f.id !== id);
         setFuncionarios(filtrados);
         StorageService.saveFuncionarios(filtrados);
@@ -460,6 +650,15 @@ export default function App() {
 
         try {
           await saveDocData('funcionarios', filtrados);
+          registrarLog({
+            email: user?.email || '',
+            apelido: user?.apelido || 'Desconhecido',
+            tipo: 'exclusao',
+            entidade: 'funcionario',
+            entidadeId: id,
+            descricao: `Excluiu o entregador ${funcExcluido?.nome || id}`,
+            dadosAntes: funcExcluido ? JSON.stringify(funcExcluido) : undefined,
+          });
         } catch (e) {
           console.error(e);
         }
@@ -535,6 +734,13 @@ export default function App() {
       await importarPedidosBatch(novosPedidos);
     }
     showToast('Importação salva no Firebase com sucesso!');
+    registrarLog({
+      email: user?.email || '',
+      apelido: user?.apelido || 'Desconhecido',
+      tipo: 'criacao',
+      entidade: 'pedido',
+      descricao: `Importou dados em lote: ${novosClientes.length} clientes, ${novosProdutos.length} produtos, ${novosPedidos.length} pedidos`,
+    });
   };
 
   // Thermal Receipt Printing (EPSON TM-T20X e bobinas 80mm)
@@ -545,7 +751,8 @@ export default function App() {
 
   const pedidosPendentesCount = pedidos.filter(p => p.status === 'pendente').length;
   const isAdmin = user ? isEmailAdmin(user.email) : false;
-  const isManutencaoBloqueante = !!manutencaoData?.ativo && !isAdmin;
+  // O bloqueio de fato só entra em vigor depois que o aviso de 30s termina.
+  const isManutencaoBloqueante = !!manutencaoData?.ativo && !isAdmin && !emAvisoManutencao;
 
   if (authLoading) {
     return (
@@ -564,6 +771,16 @@ export default function App() {
 
   return (
     <div className="min-h-screen bg-[#EEF1E9] text-[#1B2420] relative">
+      {/* Aviso de manutenção com contagem regressiva de 30s (não bloqueia o uso ainda) */}
+      {emAvisoManutencao && (
+        <div className="fixed top-0 inset-x-0 z-50 bg-[#C08A2E] text-white text-center py-3 px-4 shadow-lg flex items-center justify-center gap-2">
+          <Wrench className="w-4 h-4 flex-shrink-0" />
+          <p className="text-sm font-semibold m-0">
+            Atenção: o site entrará em manutenção em {segundosRestantesManutencao}s. Finalize e salve o que estiver fazendo.
+          </p>
+        </div>
+      )}
+
       {/* Maintenance Fullscreen Overlay for non-admins when maintenance is active */}
       {isManutencaoBloqueante && (
         <div className="fixed inset-0 z-50 bg-[#EEF1E9] flex items-center justify-center p-6 text-center">
@@ -589,7 +806,7 @@ export default function App() {
         </div>
       )}
 
-      <div className="max-w-5xl mx-auto px-4 sm:px-6 py-6 pb-20">
+      <div className={`max-w-5xl mx-auto px-4 sm:px-6 py-6 pb-20 ${emAvisoManutencao ? 'pt-16' : ''}`}>
         {/* App Header */}
         <Header
           user={user}
@@ -607,7 +824,7 @@ export default function App() {
           clientes={clientes}
           onMarcarRetiradoHoje={cid =>
             handleUpdateClienteField(cid, {
-              ultimaRetiradaRelatorio: new Date().toISOString().slice(0, 10),
+              ultimaRetiradaRelatorio: hojeISO(),
             })
           }
         />
@@ -653,6 +870,7 @@ export default function App() {
               clientes={clientes}
               produtos={produtos}
               precosOverrides={precosOverrides}
+              getPromocaoPara={getPromocaoPara}
               onSalvarPedido={handleSalvarPedido}
               pedidoEmEdicao={pedidoEmEdicao}
               onCancelarEdicao={() => {
@@ -676,6 +894,7 @@ export default function App() {
           {activeTab === 'produtos' && (
             <ProdutosTab
               produtos={produtos}
+              getPromocoesDoProduto={getPromocoesDoProduto}
               onSalvarProduto={handleSalvarProduto}
               onExcluirProduto={handleExcluirProduto}
             />
@@ -729,6 +948,10 @@ export default function App() {
               onImportarDados={handleImportarDados}
               showToast={showToast}
             />
+          )}
+
+          {activeTab === 'registroAcesso' && isAdmin && (
+            <RegistroAcessoTab />
           )}
         </main>
       </div>

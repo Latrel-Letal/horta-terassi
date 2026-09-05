@@ -2,6 +2,7 @@ import React from 'react';
 import { Leaf, LogOut, Download, Wrench, ShieldCheck } from 'lucide-react';
 import { EMITENTE_INFO } from '../constants/initialData';
 import { StorageService } from '../services/storage';
+import { hojeISO } from '../utils/formatters';
 
 interface HeaderProps {
   user: { email: string; name: string } | null;
@@ -34,7 +35,7 @@ export const Header: React.FC<HeaderProps> = ({
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `backup_horta_terassi_${new Date().toISOString().slice(0, 10)}.json`;
+    a.download = `backup_horta_terassi_${hojeISO()}.json`;
     a.click();
     URL.revokeObjectURL(url);
     showToast('Backup do banco exportado com sucesso!');

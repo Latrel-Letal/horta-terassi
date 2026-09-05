@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Upload, FileCode, CheckCircle2, AlertCircle, RefreshCw, Calendar, Filter } from 'lucide-react';
 import { Cliente, Pedido, Produto } from '../types';
+import { hojeISO } from '../utils/formatters';
 
 interface ImportarTabProps {
   clientes: Cliente[];
@@ -123,7 +124,7 @@ export const ImportarTab: React.FC<ImportarTabProps> = ({
         novosPedidos.push({
           id: `ped_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 6)}`,
           clienteId: cid,
-          data: p.data || new Date().toISOString().slice(0, 10),
+          data: p.data || hojeISO(),
           itens: p.itens || [],
           status: p.status || 'entregue',
           notaNumero: p.notaNumero || '',

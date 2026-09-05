@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Plus, Search, DollarSign, Edit3, Trash2, CheckCircle2, Building2, MapPin } from 'lucide-react';
 import { Cliente } from '../types';
+import { hojeISO } from '../utils/formatters';
 
 interface ClientesTabProps {
   clientes: Cliente[];
@@ -31,7 +32,7 @@ export const ClientesTab: React.FC<ClientesTabProps> = ({
     .sort((a, b) => (a.apelido || a.nome || '').localeCompare(b.apelido || b.nome || '', 'pt-BR'));
 
   const handleMarcarRetiradoHoje = (clienteId: string) => {
-    const hoje = new Date().toISOString().slice(0, 10);
+    const hoje = hojeISO();
     onUpdateClienteField(clienteId, { ultimaRetiradaRelatorio: hoje });
   };
 

@@ -2,6 +2,23 @@ import { Cliente, ItemPedido, Pedido, Produto, RelatorioVendasClienteGrupo, Tran
 import { EMITENTE_INFO } from '../constants/initialData';
 import { jsPDF } from 'jspdf';
 
+// Converte um Date para o formato AAAA-MM-DD usando o horário LOCAL do
+// navegador (não UTC). Use sempre esta função (ou hojeISO) em vez de
+// `date.toISOString().slice(0, 10)`: toISOString() converte pra UTC, e
+// como o Brasil está em UTC-3, a partir de ~21h o UTC já é o dia seguinte,
+// fazendo "hoje" virar "amanhã" mais cedo do que deveria.
+export function dataParaISO(d: Date): string {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+}
+
+// Data de hoje (AAAA-MM-DD) no horário local.
+export function hojeISO(): string {
+  return dataParaISO(new Date());
+}
+
 export function fmtData(d?: string): string {
   if (!d) return '';
   const parts = d.split('-');

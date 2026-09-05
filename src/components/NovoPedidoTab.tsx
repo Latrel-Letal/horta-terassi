@@ -2,12 +2,15 @@ import React, { useState, useEffect } from 'react';
 import { Plus, Trash2, CheckCircle2, ShoppingCart, Calendar, Store, Sparkles } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { Cliente, ItemPedido, Pedido, PrecosOverrides, Produto } from '../types';
-import { fmtMoeda, getPrecoProduto } from '../utils/formatters';
+import { fmtMoeda, getPrecoProduto, hojeISO } from '../utils/formatters';
+import { PromocaoBadge } from './PromocaoBadge';
+import { PromocaoResolvida } from '../hooks/usePromocaoDoDia';
 
 interface NovoPedidoTabProps {
   clientes: Cliente[];
   produtos: Produto[];
   precosOverrides: PrecosOverrides;
+  getPromocaoPara: (clienteId: string, itemKey: string) => PromocaoResolvida | null;
   onSalvarPedido: (pedido: Omit<Pedido, 'id'>) => void;
   pedidoEmEdicao?: Pedido | null;
   onCancelarEdicao?: () => void;
@@ -17,6 +20,7 @@ export const NovoPedidoTab: React.FC<NovoPedidoTabProps> = ({
   clientes,
   produtos,
   precosOverrides,
+  getPromocaoPara,
   onSalvarPedido,
   pedidoEmEdicao,
   onCancelarEdicao,
@@ -24,8 +28,8 @@ export const NovoPedidoTab: React.FC<NovoPedidoTabProps> = ({
   const [clienteId, setClienteId] = useState<string>('');
   const [clienteBusca, setClienteBusca] = useState<string>('');
   const [clienteOpen, setClienteOpen] = useState<boolean>(false);
-  const [data, setData] = useState<string>(new Date().toISOString().slice(0, 10));
-  const [dataEntrega, setDataEntrega] = useState<string>(new Date().toISOString().slice(0, 10));
+  const [data, setData] = useState<string>(hojeISO());
+  const [dataEntrega, setDataEntrega] = useState<string>(hojeISO());
 
   // Quantities for standard species grid (index in produtos -> number)
   const [gridQuantidades, setGridQuantidades] = useState<Record<number, number>>({});
@@ -94,6 +98,18 @@ export const NovoPedidoTab: React.FC<NovoPedidoTabProps> = ({
     });
   };
 
+  // Resolve o preço final de um item: usa a promoção ativa do dia (se houver
+  // uma pra esse cliente + produto) em vez do preço padrão/override, e sinaliza
+  // isso pra ser gravado junto no pedido (pra aparecer na nota e não gerar
+  // conflito de preço no total).
+  const resolverPreco = (itemKey: string): { preco: number; emPromocao: boolean } => {
+    const promo = getPromocaoPara(clienteId, itemKey);
+    if (promo) {
+      return { preco: promo.preco, emPromocao: true };
+    }
+    return { preco: getPrecoProduto(clienteId, itemKey, produtos, precosOverrides), emPromocao: false };
+  };
+
   // Calculate live totals
   let totalEstimado = 0;
   let totalItensCount = 0;
@@ -101,7 +117,8 @@ export const NovoPedidoTab: React.FC<NovoPedidoTabProps> = ({
   produtos.forEach((p, idx) => {
     const qtd = gridQuantidades[idx] || 0;
     if (qtd > 0) {
-      const unit = getPrecoProduto(clienteId, p.codigo || `DESC:${p.descricao}`, produtos, precosOverrides);
+      const itemKey = p.codigo || `DESC:${p.descricao}`;
+      const unit = resolverPreco(itemKey).preco;
       totalEstimado += unit * qtd;
       totalItensCount += qtd;
     }
@@ -109,7 +126,7 @@ export const NovoPedidoTab: React.FC<NovoPedidoTabProps> = ({
 
   itensAvulsos.forEach(it => {
     if (it.quantidade > 0 && it.codigo) {
-      const unit = getPrecoProduto(clienteId, it.codigo, produtos, precosOverrides);
+      const unit = resolverPreco(it.codigo).preco;
       totalEstimado += unit * it.quantidade;
       totalItensCount += it.quantidade;
     }
@@ -128,22 +145,24 @@ export const NovoPedidoTab: React.FC<NovoPedidoTabProps> = ({
       const qtd = gridQuantidades[idx] || 0;
       if (qtd > 0) {
         const itemKey = p.codigo || `DESC:${p.descricao}`;
-        const precoCongelado = getPrecoProduto(clienteId, itemKey, produtos, precosOverrides);
+        const { preco, emPromocao } = resolverPreco(itemKey);
         itensParaSalvar.push({
           codigo: itemKey,
           quantidade: qtd,
-          precoUnit: precoCongelado,
+          precoUnit: preco,
+          emPromocao,
         });
       }
     });
 
     itensAvulsos.forEach(it => {
       if (it.quantidade > 0 && it.codigo) {
-        const precoCongelado = getPrecoProduto(clienteId, it.codigo, produtos, precosOverrides);
+        const { preco, emPromocao } = resolverPreco(it.codigo);
         itensParaSalvar.push({
           codigo: it.codigo,
           quantidade: it.quantidade,
-          precoUnit: precoCongelado,
+          precoUnit: preco,
+          emPromocao,
         });
       }
     });
@@ -288,7 +307,7 @@ export const NovoPedidoTab: React.FC<NovoPedidoTabProps> = ({
           <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-1 bg-white border border-[#D8D9C9] rounded-xl p-3 md:p-4">
             {produtos.map((p, idx) => {
               const itemKey = p.codigo || `DESC:${p.descricao}`;
-              const precoUnit = getPrecoProduto(clienteId, itemKey, produtos, precosOverrides);
+              const { preco: precoUnit, emPromocao } = resolverPreco(itemKey);
               const qtd = gridQuantidades[idx] || '';
 
               return (
@@ -297,8 +316,9 @@ export const NovoPedidoTab: React.FC<NovoPedidoTabProps> = ({
                   className="flex items-center justify-between gap-3 py-2 border-b border-dashed border-[#D8D9C9] last:border-b-0 hover:bg-[#EEF1E9]/30 px-2 rounded-md transition-colors"
                 >
                   <div className="min-w-0 pr-2">
-                    <span className="text-sm font-medium text-[#132A1D] block truncate">
-                      {p.descricao}
+                    <span className="text-sm font-medium text-[#132A1D] flex items-center gap-2 flex-wrap">
+                      <span className="truncate">{p.descricao}</span>
+                      {emPromocao && <PromocaoBadge />}
                     </span>
                     <span className="text-xs text-[#4B564C] font-mono">
                       · {fmtMoeda(precoUnit)} / {p.unidade}

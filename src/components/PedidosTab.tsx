@@ -25,6 +25,7 @@ import {
   getPrecoItem,
   getProdutoInfo
 } from '../utils/formatters';
+import { PromocaoBadge } from './PromocaoBadge';
 
 interface PedidosTabProps {
   pedidos: Pedido[];
@@ -327,8 +328,9 @@ export const PedidosTab: React.FC<PedidosTabProps> = ({
                                     className="py-1.5 flex items-start justify-between gap-2 text-sm"
                                   >
                                     <div className="leading-snug">
-                                      <span className="font-medium text-[#1B2420]">
+                                      <span className="font-medium text-[#1B2420] inline-flex items-center gap-1.5 flex-wrap">
                                         {info.descricao}
+                                        {it.emPromocao && <PromocaoBadge />}
                                       </span>
                                       <span className="block text-xs text-[#4B564C] opacity-85">
                                         {fmtMoeda(preco)} un.
@@ -635,8 +637,9 @@ export const PedidosTab: React.FC<PedidosTabProps> = ({
                                         className="py-1.5 flex items-start justify-between gap-2 text-sm"
                                       >
                                         <div className="leading-snug">
-                                          <span className="font-medium text-[#1B2420]">
+                                          <span className="font-medium text-[#1B2420] inline-flex items-center gap-1.5 flex-wrap">
                                             {info.descricao}
+                                            {it.emPromocao && <PromocaoBadge />}
                                           </span>
                                           <span className="block text-xs text-[#4B564C] opacity-85">
                                             {fmtMoeda(preco)} un.
@@ -687,13 +690,13 @@ export const PedidosTab: React.FC<PedidosTabProps> = ({
                                             max={it.quantidade}
                                             step="1"
                                             value={devQtd}
-                                            onChange={e =>
-                                              onUpdateDevolucao(
-                                                pedido.id,
-                                                it.codigo,
-                                                parseFloat(e.target.value) || 0
-                                              )
-                                            }
+                                            onChange={e => {
+                                              const digitado = parseFloat(e.target.value) || 0;
+                                              // Nunca permite lançar perda/devolução maior do
+                                              // que a quantidade realmente entregue.
+                                              const qtdValida = Math.max(0, Math.min(digitado, it.quantidade));
+                                              onUpdateDevolucao(pedido.id, it.codigo, qtdValida);
+                                            }}
                                             placeholder="0"
                                             className="w-16 px-2 py-1 text-center font-mono text-xs bg-white border border-[#D8D9C9] rounded focus:outline-none focus:ring-1 focus:ring-[#A6432F]"
                                           />

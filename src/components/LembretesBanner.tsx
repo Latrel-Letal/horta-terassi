@@ -1,6 +1,7 @@
 import React from 'react';
 import { AlertTriangle, CheckCircle2, Clock } from 'lucide-react';
 import { Cliente, LembreteRetirada } from '../types';
+import { hojeISO, dataParaISO } from '../utils/formatters';
 
 interface LembretesBannerProps {
   clientes: Cliente[];
@@ -8,7 +9,7 @@ interface LembretesBannerProps {
 }
 
 export const LembretesBanner: React.FC<LembretesBannerProps> = ({ clientes, onMarcarRetiradoHoje }) => {
-  const hoje = new Date().toISOString().slice(0, 10);
+  const hoje = hojeISO();
 
   const lembretes: LembreteRetirada[] = clientes
     .filter(c => c.periodicidadeRelatorio)
@@ -17,7 +18,7 @@ export const LembretesBanner: React.FC<LembretesBannerProps> = ({ clientes, onMa
       if (c.ultimaRetiradaRelatorio) {
         const d = new Date(c.ultimaRetiradaRelatorio + 'T00:00:00');
         d.setDate(d.getDate() + (c.periodicidadeRelatorio || 0));
-        proxima = d.toISOString().slice(0, 10);
+        proxima = dataParaISO(d);
       }
       const atrasoDias = Math.round(
         (new Date(hoje + 'T00:00:00').getTime() - new Date(proxima + 'T00:00:00').getTime()) / 86400000

@@ -38,17 +38,36 @@ function resolverPromocao(promo: Promocao, clientes: Cliente[], produtos: Produt
 // pra exibir o selo de promoção (ProdutosTab) quanto pra aplicar o preço
 // promocional automaticamente ao lançar um pedido (NovoPedidoTab) — assim o
 // valor já sai congelado corretamente na nota, sem depender de digitação manual.
+//
+// A validade é reavaliada a cada minuto (não só quando o Firestore muda),
+// pra garantir que o preço promocional some sozinho assim que vencer, mesmo
+// que o bot do WhatsApp não seja executado no dia do vencimento e ninguém
+// cancele a promoção manualmente.
+const INTERVALO_REVALIDACAO_MS = 60 * 1000;
+
 export function usePromocaoDoDia(clientes: Cliente[], produtos: Produto[]) {
   const [promocoesAtivas, setPromocoesAtivas] = useState<Promocao[]>([]);
+  const [agora, setAgora] = useState(() => Date.now());
 
   useEffect(() => {
     const unsubscribe = subscribePromocoesAtivas(setPromocoesAtivas);
     return unsubscribe;
   }, []);
 
+  useEffect(() => {
+    const intervalId = setInterval(() => setAgora(Date.now()), INTERVALO_REVALIDACAO_MS);
+    return () => clearInterval(intervalId);
+  }, []);
+
   const resolvidas = useMemo<PromocaoResolvida[]>(
-    () => promocoesAtivas.map(p => resolverPromocao(p, clientes, produtos)),
-    [promocoesAtivas, clientes, produtos]
+    () =>
+      promocoesAtivas
+        .filter(p => {
+          const validadeMs = (p.validade as any)?.toMillis?.() ?? 0;
+          return validadeMs >= agora;
+        })
+        .map(p => resolverPromocao(p, clientes, produtos)),
+    [promocoesAtivas, clientes, produtos, agora]
   );
 
   // Promoção ativa pra uma combinação exata de cliente + produto (usado no

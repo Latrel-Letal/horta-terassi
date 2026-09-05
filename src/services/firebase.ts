@@ -219,21 +219,19 @@ export async function importarPedidosBatch(novosPedidos: Pedido[]): Promise<void
 
 // ===== Promoções (lançadas pelo bot de WhatsApp) =====
 
-// Ouve em tempo real as promoções ativas (ativa == true), filtrando também
-// as que já venceram (mesma lógica usada pelo bot). Retorna a função de
-// unsubscribe, pra ser chamada no cleanup do useEffect.
+// Ouve em tempo real as promoções marcadas como ativas (ativa == true) no
+// Firestore. Não filtra por data de validade aqui — isso fica a cargo de
+// quem consome (usePromocaoDoDia), que reavalia a validade periodicamente
+// mesmo sem nenhuma mudança no Firestore, garantindo que o preço
+// promocional suma sozinho assim que vencer, mesmo que o bot não seja
+// executado naquele dia. Retorna a função de unsubscribe, pra ser chamada
+// no cleanup do useEffect.
 export function subscribePromocoesAtivas(callback: (promocoes: Promocao[]) => void): () => void {
   const q = query(collection(db, 'promocoes'), where('ativa', '==', true));
   return onSnapshot(
     q,
     snapshot => {
-      const agora = Date.now();
-      const ativas = snapshot.docs
-        .map(d => ({ id: d.id, ...(d.data() as Omit<Promocao, 'id'>) }))
-        .filter(p => {
-          const validadeMs = (p.validade as any)?.toMillis?.() ?? 0;
-          return validadeMs >= agora;
-        });
+      const ativas = snapshot.docs.map(d => ({ id: d.id, ...(d.data() as Omit<Promocao, 'id'>) }));
       callback(ativas);
     },
     error => {

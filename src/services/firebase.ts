@@ -23,7 +23,7 @@ import {
   reauthenticateWithCredential,
   User
 } from 'firebase/auth';
-import { Cliente, Funcionario, Pedido, PrecosOverrides, Produto, Promocao, TransporteConfig } from '../types';
+import { Cliente, DevolucaoAvulsa, Funcionario, Pedido, PrecosOverrides, Produto, Promocao, TransporteConfig } from '../types';
 import { DEFAULT_CLIENTES, DEFAULT_FUNCIONARIOS, DEFAULT_PRODUTOS, DEFAULT_TRANSPORTE } from '../constants/initialData';
 
 // Configuração oficial do projeto Firebase da Horta Terassi
@@ -217,6 +217,39 @@ export async function importarPedidosBatch(novosPedidos: Pedido[]): Promise<void
   }
 }
 
+// ===== Devoluções avulsas (sem vínculo com pedido) =====
+
+export function subscribeDevolucoesAvulsas(callback: (devolucoes: DevolucaoAvulsa[]) => void): () => void {
+  const col = collection(db, 'horta_data', 'devolucoes', 'items');
+  return onSnapshot(
+    col,
+    snapshot => {
+      callback(snapshot.docs.map(d => ({ ...(d.data() as DevolucaoAvulsa), id: d.id })));
+    },
+    error => {
+      console.error('Erro ao ouvir devoluções avulsas em tempo real:', error);
+    }
+  );
+}
+
+export async function saveFirebaseDevolucao(dev: DevolucaoAvulsa): Promise<void> {
+  try {
+    await setDoc(doc(db, 'horta_data', 'devolucoes', 'items', dev.id), dev);
+  } catch (error) {
+    console.error('Erro ao salvar devolução no Firebase:', error);
+    throw error;
+  }
+}
+
+export async function deleteFirebaseDevolucao(id: string): Promise<void> {
+  try {
+    await deleteDoc(doc(db, 'horta_data', 'devolucoes', 'items', id));
+  } catch (error) {
+    console.error('Erro ao excluir devolução no Firebase:', error);
+    throw error;
+  }
+}
+
 // ===== Promoções (lançadas pelo bot de WhatsApp) =====
 
 // Ouve em tempo real as promoções marcadas como ativas (ativa == true) no
@@ -248,7 +281,7 @@ export interface LogAcesso {
   email: string;
   apelido: string;
   tipo: 'login' | 'criacao' | 'edicao' | 'exclusao';
-  entidade?: 'pedido' | 'cliente' | 'produto' | 'funcionario';
+  entidade?: 'pedido' | 'cliente' | 'produto' | 'funcionario' | 'devolucao';
   entidadeId?: string;
   descricao?: string;
   dadosAntes?: string; // snapshot em JSON do item no momento da exclusão, para permitir recuperação

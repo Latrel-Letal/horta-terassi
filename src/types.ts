@@ -39,6 +39,16 @@ export interface Pedido {
   devolucoes?: Record<string, number>; // { [codigoProduto]: quantidadeDevolvida }
 }
 
+// Devolução/perda lançada direto, sem vínculo com um pedido específico.
+// Um lançamento pode ter vários produtos (itens) de um mesmo mercado.
+export interface DevolucaoAvulsa {
+  id: string;
+  clienteId: string;
+  data: string; // YYYY-MM-DD
+  itens: ItemPedido[]; // precoUnit fica congelado no momento do lançamento
+  criadoPor?: string;
+}
+
 export interface Funcionario {
   id: string;
   nome: string;

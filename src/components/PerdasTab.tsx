@@ -1,8 +1,9 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Chart, registerables } from 'chart.js';
 import { TrendingDown, DollarSign, Filter, BarChart3, AlertOctagon } from 'lucide-react';
-import { Cliente, Pedido, PrecosOverrides, Produto } from '../types';
-import { fmtData, fmtMoeda, getPrecoItem, getProdutoInfo } from '../utils/formatters';
+import { Cliente, DevolucaoAvulsa, Pedido, PrecosOverrides, Produto } from '../types';
+import { fmtData, fmtMoeda, getPrecoItem, getPrecoProduto, getProdutoInfo } from '../utils/formatters';
+import { DevolucoesAvulsasCard } from './DevolucoesAvulsasCard';
 
 Chart.register(...registerables);
 
@@ -11,6 +12,9 @@ interface PerdasTabProps {
   clientes: Cliente[];
   produtos: Produto[];
   precosOverrides: PrecosOverrides;
+  devolucoesAvulsas: DevolucaoAvulsa[];
+  onSalvarDevolucao: (dev: Omit<DevolucaoAvulsa, 'id'>) => Promise<void> | void;
+  onExcluirDevolucao: (id: string) => void;
 }
 
 export const PerdasTab: React.FC<PerdasTabProps> = ({
@@ -18,6 +22,9 @@ export const PerdasTab: React.FC<PerdasTabProps> = ({
   clientes,
   produtos,
   precosOverrides,
+  devolucoesAvulsas,
+  onSalvarDevolucao,
+  onExcluirDevolucao,
 }) => {
   // Filters
   const [pdDe, setPdDe] = useState('');
@@ -78,6 +85,33 @@ export const PerdasTab: React.FC<PerdasTabProps> = ({
       });
     });
 
+  // Devoluções avulsas (sem vínculo com pedido) entram como perdas também
+  const avulsasFiltradas = devolucoesAvulsas.filter(
+    d =>
+      (!pdDe || d.data >= pdDe) &&
+      (!pdAte || d.data <= pdAte) &&
+      (!pdMercado || d.clienteId === pdMercado)
+  );
+
+  avulsasFiltradas.forEach(d => {
+    d.itens.forEach(it => {
+      if (pdProduto && it.codigo !== pdProduto) return;
+      const info = getProdutoInfo(it.codigo, produtos);
+      const preco =
+        it.precoUnit !== undefined && it.precoUnit !== null
+          ? Number(it.precoUnit)
+          : getPrecoProduto(d.clienteId, it.codigo, produtos, precosOverrides);
+      registrosPerdas.push({
+        data: d.data,
+        clienteId: d.clienteId,
+        clienteNome: getClienteNome(d.clienteId),
+        produtoDescricao: info.descricao,
+        quantidade: it.quantidade,
+        valor: it.quantidade * preco,
+      });
+    });
+  });
+
   // Collect Net Revenue Data (Arrecadação Efetiva)
   const registrosArrecadado: {
     data: string;
@@ -117,6 +151,26 @@ export const PerdasTab: React.FC<PerdasTabProps> = ({
         });
       });
     });
+
+  // Devoluções avulsas abatem a arrecadação (entram como linhas negativas)
+  avulsasFiltradas.forEach(d => {
+    d.itens.forEach(it => {
+      if (pdProduto && it.codigo !== pdProduto) return;
+      const info = getProdutoInfo(it.codigo, produtos);
+      const preco =
+        it.precoUnit !== undefined && it.precoUnit !== null
+          ? Number(it.precoUnit)
+          : getPrecoProduto(d.clienteId, it.codigo, produtos, precosOverrides);
+      registrosArrecadado.push({
+        data: d.data,
+        clienteId: d.clienteId,
+        clienteNome: getClienteNome(d.clienteId),
+        produtoDescricao: info.descricao,
+        quantidade: -it.quantidade,
+        valor: -(it.quantidade * preco),
+      });
+    });
+  });
 
   // Update Charts when data or config changes
   useEffect(() => {
@@ -242,6 +296,15 @@ export const PerdasTab: React.FC<PerdasTabProps> = ({
             Quantidade e valor perdido calculados a partir das devoluções lançadas nos pedidos entregues.
           </p>
         </div>
+
+        <DevolucoesAvulsasCard
+          clientes={clientes}
+          produtos={produtos}
+          precosOverrides={precosOverrides}
+          devolucoes={devolucoesAvulsas}
+          onSalvar={onSalvarDevolucao}
+          onExcluir={onExcluirDevolucao}
+        />
 
         {/* Filters Card */}
         <div className="bg-white border border-[#D8D9C9] rounded-xl p-5 shadow-sm space-y-4 mb-5">

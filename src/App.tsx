@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { StorageService } from './services/storage';
-import { Cliente, Funcionario, Pedido, PrecosOverrides, Produto, TransporteConfig } from './types';
+import { Cliente, DevolucaoAvulsa, Funcionario, Pedido, PrecosOverrides, Produto, TransporteConfig } from './types';
 import { hojeISO, fmtMoeda, calcularTotalPedido, getProdutoInfo } from './utils/formatters';
 import { 
   auth, 
@@ -14,7 +14,10 @@ import {
   registrarLog,
   migrarPedidosLegado,
   subscribeFirebasePedidos,
-  subscribeDocData
+  subscribeDocData,
+  subscribeDevolucoesAvulsas,
+  saveFirebaseDevolucao,
+  deleteFirebaseDevolucao
 } from './services/firebase';
 import { onAuthStateChanged, signOut } from 'firebase/auth';
 import { doc, onSnapshot, setDoc, serverTimestamp } from 'firebase/firestore';
@@ -85,6 +88,7 @@ export default function App() {
   const [funcionarios, setFuncionarios] = useState<Funcionario[]>(() => StorageService.getFuncionarios());
   const [precosOverrides, setPrecosOverrides] = useState<PrecosOverrides>(() => StorageService.getPrecosOverrides());
   const [transporteConfig, setTransporteConfig] = useState<TransporteConfig>(() => StorageService.getTransporte());
+  const [devolucoesAvulsas, setDevolucoesAvulsas] = useState<DevolucaoAvulsa[]>([]);
   const [loadingData, setLoadingData] = useState(false);
 
   // Promoções ativas do dia (lançadas pelo bot de WhatsApp), já cruzadas
@@ -140,7 +144,7 @@ export default function App() {
     // Migração de pedidos do formato antigo só precisa rodar uma vez.
     migrarPedidosLegado().catch(e => console.error('Erro na migração de pedidos legados:', e));
 
-    let pendentes = 6;
+    let pendentes = 7;
     const marcarCarregado = () => {
       pendentes = Math.max(0, pendentes - 1);
       if (pendentes === 0) setLoadingData(false);
@@ -175,6 +179,10 @@ export default function App() {
       subscribeFirebasePedidos(data => {
         setPedidos(data);
         StorageService.savePedidos(data);
+        marcarCarregado();
+      }),
+      subscribeDevolucoesAvulsas(data => {
+        setDevolucoesAvulsas(data);
         marcarCarregado();
       }),
     ];
@@ -456,6 +464,55 @@ export default function App() {
     } catch (e) {
       console.error(e);
     }
+  };
+
+  // Devoluções avulsas (lançadas direto por mercado, sem vínculo com pedido)
+  const handleSalvarDevolucaoAvulsa = async (dados: Omit<DevolucaoAvulsa, 'id'>) => {
+    const nova: DevolucaoAvulsa = {
+      ...dados,
+      id: `dev_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+      criadoPor: user?.apelido || 'Desconhecido',
+    };
+    await saveFirebaseDevolucao(nova);
+    showToast('Devolução lançada.');
+    const resumo = nova.itens
+      .map(it => `${it.quantidade}x ${getProdutoInfo(it.codigo, produtos).descricao}`)
+      .join(', ');
+    registrarLog({
+      email: user?.email || '',
+      apelido: user?.apelido || 'Desconhecido',
+      tipo: 'criacao',
+      entidade: 'devolucao',
+      entidadeId: nova.id,
+      descricao: `Lançou devolução avulsa de ${nomeClienteById(nova.clienteId)}: ${resumo}`,
+    });
+  };
+
+  const handleExcluirDevolucaoAvulsa = (id: string) => {
+    const alvo = devolucoesAvulsas.find(d => d.id === id);
+    setModalSenha({
+      isOpen: true,
+      mensagem: 'Tem certeza que deseja excluir este lançamento de devolução?',
+      onConfirm: async () => {
+        setModalSenha(prev => ({ ...prev, isOpen: false }));
+        try {
+          await deleteFirebaseDevolucao(id);
+          showToast('Lançamento excluído.');
+          registrarLog({
+            email: user?.email || '',
+            apelido: user?.apelido || 'Desconhecido',
+            tipo: 'exclusao',
+            entidade: 'devolucao',
+            entidadeId: id,
+            descricao: `Excluiu devolução avulsa de ${alvo ? nomeClienteById(alvo.clienteId) : id}`,
+            dadosAntes: alvo ? JSON.stringify(alvo) : undefined,
+          });
+        } catch (e) {
+          console.error(e);
+          showToast('Erro ao excluir o lançamento.');
+        }
+      },
+    });
   };
 
   // Clientes Handlers
@@ -916,6 +973,9 @@ export default function App() {
               clientes={clientes}
               produtos={produtos}
               precosOverrides={precosOverrides}
+              devolucoesAvulsas={devolucoesAvulsas}
+              onSalvarDevolucao={handleSalvarDevolucaoAvulsa}
+              onExcluirDevolucao={handleExcluirDevolucaoAvulsa}
             />
           )}
 
@@ -925,6 +985,7 @@ export default function App() {
               clientes={clientes}
               produtos={produtos}
               precosOverrides={precosOverrides}
+              devolucoesAvulsas={devolucoesAvulsas}
               onVerFichaNota={id => setModalFichaPedidoId(id)}
             />
           )}

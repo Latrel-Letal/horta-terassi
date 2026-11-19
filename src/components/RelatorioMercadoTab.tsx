@@ -1,8 +1,10 @@
 import React, { useState } from 'react';
-import { FileBarChart2, Filter, RotateCcw, Calendar, CheckCircle2 } from 'lucide-react';
-import { Cliente, Pedido, PrecosOverrides, Produto } from '../types';
+import { FileBarChart2, Download } from 'lucide-react';
+import { Cliente, DevolucaoAvulsa, Pedido, PrecosOverrides, Produto } from '../types';
 import {
   calcularDevolucaoTotal,
+  calcularValorDevolucaoAvulsa,
+  exportarRelatorioMercadoPdf,
   calcularTotalPedido,
   fmtData,
   fmtMoeda,
@@ -15,6 +17,7 @@ interface RelatorioMercadoTabProps {
   clientes: Cliente[];
   produtos: Produto[];
   precosOverrides: PrecosOverrides;
+  devolucoesAvulsas: DevolucaoAvulsa[];
   onVerFichaNota: (pedidoId: string) => void;
 }
 
@@ -23,6 +26,7 @@ export const RelatorioMercadoTab: React.FC<RelatorioMercadoTabProps> = ({
   clientes,
   produtos,
   precosOverrides,
+  devolucoesAvulsas,
   onVerFichaNota,
 }) => {
   const [relDe, setRelDe] = useState('');
@@ -51,6 +55,16 @@ export const RelatorioMercadoTab: React.FC<RelatorioMercadoTabProps> = ({
     porCliente[p.clienteId].bruto += total;
     porCliente[p.clienteId].devolucao += dev;
   });
+
+  // Devoluções avulsas do período entram no abatimento do mercado
+  devolucoesAvulsas
+    .filter(d => (!relDe || d.data >= relDe) && (!relAte || d.data <= relAte))
+    .forEach(d => {
+      if (!porCliente[d.clienteId]) {
+        porCliente[d.clienteId] = { pedidos: 0, bruto: 0, devolucao: 0 };
+      }
+      porCliente[d.clienteId].devolucao += calcularValorDevolucaoAvulsa(d, produtos, precosOverrides);
+    });
 
   const ids = Object.keys(porCliente).sort((a, b) =>
     getClienteNome(a).localeCompare(getClienteNome(b), 'pt-BR')
@@ -119,6 +133,30 @@ export const RelatorioMercadoTab: React.FC<RelatorioMercadoTabProps> = ({
             </button>
           </div>
         </div>
+      </div>
+
+      <div className="flex justify-end">
+        <button
+          type="button"
+          disabled={ids.length === 0}
+          onClick={() =>
+            exportarRelatorioMercadoPdf(
+              ids.map(id => ({
+                mercado: getClienteNome(id),
+                pedidos: porCliente[id].pedidos,
+                bruto: porCliente[id].bruto,
+                devolucao: porCliente[id].devolucao,
+              })),
+              entregues.length,
+              relDe,
+              relAte
+            )
+          }
+          className="px-4 py-2 text-xs font-bold text-white bg-[#1F3D2B] hover:bg-[#132A1D] disabled:opacity-50 disabled:cursor-not-allowed rounded-lg flex items-center gap-2"
+        >
+          <Download className="w-4 h-4" />
+          Baixar PDF
+        </button>
       </div>
 
       {/* Summary Table */}

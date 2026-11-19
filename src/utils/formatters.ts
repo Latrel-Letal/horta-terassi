@@ -1,4 +1,4 @@
-import { Cliente, ItemPedido, Pedido, Produto, RelatorioVendasClienteGrupo, TransporteConfig } from '../types';
+import { Cliente, DevolucaoAvulsa, ItemPedido, Pedido, Produto, RelatorioVendasClienteGrupo, TransporteConfig } from '../types';
 import { EMITENTE_INFO } from '../constants/initialData';
 import { jsPDF } from 'jspdf';
 
@@ -102,6 +102,153 @@ export function calcularDevolucaoTotal(
     const unit = getPrecoItem(pedido, it, produtos, precosOverrides);
     return s + q * unit;
   }, 0);
+}
+
+// Valor total de uma devolução avulsa (usa o preço congelado no lançamento;
+// se não houver, cai no preço do cliente/produto).
+export function calcularValorDevolucaoAvulsa(
+  dev: DevolucaoAvulsa,
+  produtos: Produto[],
+  precosOverrides: Record<string, Record<string, number>>
+): number {
+  return dev.itens.reduce((s, it) => {
+    const unit =
+      it.precoUnit !== undefined && it.precoUnit !== null && !isNaN(Number(it.precoUnit))
+        ? Number(it.precoUnit)
+        : getPrecoProduto(dev.clienteId, it.codigo, produtos, precosOverrides);
+    return s + unit * it.quantidade;
+  }, 0);
+}
+
+export interface LinhaRelatorioMercado {
+  mercado: string;
+  pedidos: number;
+  bruto: number;
+  devolucao: number;
+}
+
+export function exportarRelatorioMercadoPdf(
+  linhas: LinhaRelatorioMercado[],
+  totalPedidos: number,
+  de?: string,
+  ate?: string
+): void {
+  const doc = new jsPDF({ unit: 'mm', format: 'a4' });
+  const margin = 15;
+  const pageWidth = doc.internal.pageSize.getWidth();
+  const pageHeight = doc.internal.pageSize.getHeight();
+  const periodoTexto = de || ate ? `${de ? fmtData(de) : '—'} a ${ate ? fmtData(ate) : '—'}` : 'Todo o período';
+
+  // Colunas (alinhadas à direita, exceto Mercado)
+  const col = {
+    mercado: margin,
+    pedidos: margin + 85,
+    bruto: margin + 115,
+    dev: margin + 145,
+    liq: pageWidth - margin,
+  };
+
+  let y = margin;
+
+  function cabecalhoPagina() {
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(14);
+    doc.setTextColor(19, 42, 29);
+    doc.text('Relatório financeiro por mercado', margin, y);
+    y += 6;
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(9);
+    doc.setTextColor(75, 86, 76);
+    doc.text(`Horta Terassi  ·  Período: ${periodoTexto}`, margin, y);
+    y += 4;
+    doc.text(`Gerado em ${new Date().toLocaleString('pt-BR')}`, margin, y);
+    y += 6;
+  }
+
+  function cabecalhoTabela() {
+    doc.setFillColor(238, 241, 233);
+    doc.rect(margin, y - 4.5, pageWidth - margin * 2, 7, 'F');
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(8.5);
+    doc.setTextColor(75, 86, 76);
+    doc.text('MERCADO', col.mercado + 1, y);
+    doc.text('PEDIDOS', col.pedidos, y, { align: 'right' });
+    doc.text('TOTAL BRUTO', col.bruto, y, { align: 'right' });
+    doc.text('DEVOLUÇÃO', col.dev, y, { align: 'right' });
+    doc.text('LÍQUIDO', col.liq - 1, y, { align: 'right' });
+    y += 3;
+    doc.setDrawColor(31, 61, 43);
+    doc.setLineWidth(0.4);
+    doc.line(margin, y, pageWidth - margin, y);
+    y += 5;
+  }
+
+  function novaPaginaSe(altura: number) {
+    if (y + altura > pageHeight - margin) {
+      doc.addPage();
+      y = margin;
+      cabecalhoPagina();
+      cabecalhoTabela();
+    }
+  }
+
+  cabecalhoPagina();
+  cabecalhoTabela();
+
+  let totBruto = 0;
+  let totDev = 0;
+
+  linhas.forEach(l => {
+    novaPaginaSe(8);
+    const liq = l.bruto - l.devolucao;
+    totBruto += l.bruto;
+    totDev += l.devolucao;
+
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(9.5);
+    doc.setTextColor(19, 42, 29);
+    const nome = doc.splitTextToSize(l.mercado, 78)[0] as string;
+    doc.text(nome, col.mercado + 1, y);
+
+    doc.setFont('helvetica', 'normal');
+    doc.setTextColor(75, 86, 76);
+    doc.text(String(l.pedidos), col.pedidos, y, { align: 'right' });
+    doc.text(fmtMoeda(l.bruto), col.bruto, y, { align: 'right' });
+    doc.setTextColor(166, 67, 47);
+    doc.text(fmtMoeda(l.devolucao), col.dev, y, { align: 'right' });
+    doc.setFont('helvetica', 'bold');
+    doc.setTextColor(31, 61, 43);
+    doc.text(fmtMoeda(liq), col.liq - 1, y, { align: 'right' });
+
+    y += 2.5;
+    doc.setDrawColor(216, 217, 201);
+    doc.setLineWidth(0.2);
+    doc.line(margin, y, pageWidth - margin, y);
+    y += 5;
+  });
+
+  novaPaginaSe(12);
+  y += 1;
+  doc.setFillColor(231, 240, 227);
+  doc.rect(margin, y - 5, pageWidth - margin * 2, 9, 'F');
+  doc.setDrawColor(31, 61, 43);
+  doc.setLineWidth(0.4);
+  doc.line(margin, y - 5, pageWidth - margin, y - 5);
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(10);
+  doc.setTextColor(31, 61, 43);
+  doc.text('Total consolidado', col.mercado + 1, y);
+  doc.text(String(totalPedidos), col.pedidos, y, { align: 'right' });
+  doc.text(fmtMoeda(totBruto), col.bruto, y, { align: 'right' });
+  doc.setTextColor(166, 67, 47);
+  doc.text(fmtMoeda(totDev), col.dev, y, { align: 'right' });
+  doc.setTextColor(31, 61, 43);
+  doc.text(fmtMoeda(totBruto - totDev), col.liq - 1, y, { align: 'right' });
+
+  const partes = ['relatorio-financeiro-mercado-horta-terassi'];
+  if (de) partes.push(de);
+  if (ate) partes.push(ate);
+  doc.save(partes.join('_') + '.pdf');
 }
 
 export function gerarTextoFichaNFe(
